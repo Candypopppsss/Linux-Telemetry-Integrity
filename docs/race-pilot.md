@@ -181,11 +181,33 @@ The observed invocation timestamps differed (17:54:38, 19:03:36, 19:08:12, and 1
 
 **Limits:** Matching version strings do not establish byte-identical Falco binaries or every runtime option and mutable state; a matching boot ID does not guarantee equal load, scheduling, or temporal interleaving. These checks are based on user-provided terminal output, not independent access to the VM's raw evidence.
 
-**Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlalternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
+**Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
+
+## Decision validation — offline result and live-test limit
+
+The project discussion retrieved on 2026-10-10 adds a decision comparison on the existing sentinel dataset `raw/race-v2-falco-9j2z61st`. These are user-reported results, not an independent rerun.
+
+| Check | Reported result | Interpretation |
+| --- | --- | --- |
+| Offline executable-inode predicate | 100 / 100 matches | Bounded object-based comparison |
+| Offline resolved-path predicate | 99 / 100 matches | Allowed basenames: `raven0000`, `tulip1111` |
+| Predicate difference | 1 / 100 | Trial 25, PID 12548, inode 1044816, resolved basename `taven0000` |
+| Decision-rule file validation | `tests/lti_decision_lab.yaml: Ok` | Syntax/configuration validation only |
+| Live-test diagnostic window | `LTI_FALCO=110`; both decision-alert markers=0 | Invalid decision comparison; no missed-detection count established |
+
+The offline comparison was reported at 14:14:16 UTC. The hybrid-path execution matched the object predicate but not the two-name path predicate. This demonstrates a decision difference on saved fields; it does not measure live Falco alerts or establish exploitation.
+
+The discussed laboratory rules restrict input to successful `execve`/`execveat` events with a requested path in the race evidence directory ending in `/raven0000`. The object predicate uses the recorded laboratory inodes `1044775` and `1044816`; the path predicate accepts resolved paths ending in `/raven0000` or `/tulip1111`. These identifiers are local to this experiment, not portable object identities or production rules. The complete rule file has not been imported into this repository.
+
+The diagnostic reported at 14:41:07 UTC found the temporary rule/configuration files absent and only the baseline rule recognized by the listing check. Service logs indicated earlier loading of the temporary files, but did not establish that both decision rules were active throughout the measured window. Zero object and path alerts therefore cannot be interpreted as 100 missed detections.
+
+A separate retained project excerpt records a user-reported pass after comparing the local decision-rule file with its installed copy. The full check output and same-PID alert evidence are unavailable in that excerpt. Preserve this as a reported configuration-check pass; it does not close the live decision-validation gate.
+
+Before a valid live comparison, retain the active configuration and rule hashes, verify `rule_matching: all` and recognition of both decision rules, and obtain one object alert and one path alert for the same ordinary control PID. Then repeat the bounded race with PID-correlated alerts and collector-health checks. The latest available audit preflight is recorded in [methodology](methodology.md#reported-project-results); no audit comparator result is available.
 
 ## Implementation hypothesis
 
-Falco 0.45.0 includes `falcosecurity/libs` 0.26.0. In its modern eBPF implementation, successful-exec telemetry stores `trusted_exepath` through `auxmap__store_task_exe_file_path`, which obtains the executable file path and invokes an approximate dentry-walking reconstruction. The implementation comments expressly note that it cannot lock pathname components and can encounter races. This is a source-supported *mechanism to investigate*, not proof that it produced the two recorded strings.
+Falco 0.45.0 includes `falcosecurity/libs` 0.26.0. In its modern eBPF implementation, successful-exec telemetry stores `trusted_exepath` through `auxmap__store_task_exe_file_path`, which obtains the executable file path and invokes an approximate dentry-walking reconstruction. The implementation comments expressly note that it cannot lock pathname components and can encounter races. This is a source-supported *mechanism to investigate*, not proof that it produced the recorded hybrid strings.
 
 - [Falco 0.45.0 release and libs version](https://falco.org/blog/falco-0-45-0/)
 - [Falco libs 0.26.0 path reconstruction](https://github.com/falcosecurity/libs/blob/0.26.0/driver/modern_bpf/helpers/store/auxmap_store_params.h)

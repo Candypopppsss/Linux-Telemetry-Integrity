@@ -42,7 +42,7 @@ The experiment does not change monitoring attachments, audit rules, or daemon co
 
 ## Reported project results
 
-These results come from user-posted reports in the project conversation, retrieved on 2026-10-10. Timestamps below identify the messages in UTC, not independently verified execution times. The underlying source revisions, raw artifacts, and kernel configurations were unavailable for this review. These reports do not validate the repository's bpftrace scaffold.
+These results come from user-posted reports in project conversations, reconciled on 2026-10-10. Timestamps below identify the messages in UTC, not independently verified execution times. Raw artifacts and a complete reproducible source/build package remain unavailable. Subsequent racer source excerpts and recorded environment checks are reviewed in [race-pilot.md](race-pilot.md). These reports do not validate the repository's bpftrace scaffold.
 
 | Report timestamp (UTC) | Control | User-reported result | Scope |
 | --- | --- | --- | --- |
@@ -51,7 +51,11 @@ These results come from user-posted reports in the project conversation, retriev
 
 The V2 report identifies `raw/v2-baseline-tjisapin` as its local evidence directory. It reports seen=submitted=received=written=100, accounting CONSISTENT, and zero read errors, missing task/mm/exe/inode/superblock counters, reservation failures, malformed records, and write errors. The directory is an evidence locator, not an artifact included in this repository.
 
-The V2 failed-execution control remains a proposed next step; no completed result was retrieved. A separate user-posted build failure for `src/mutation/race_exec.c` reports implicit declarations of `major()` and `minor()` under `-Werror`. Linux `makedev(3)` declares both interfaces in `<sys/sysmacros.h>`; a missing include is therefore the leading diagnosis. The source is absent from this repository, so the include change and race workload remain unvalidated.
+No completed V2 failed-execution result was retrieved. An earlier build failure for `src/mutation/race_exec.c` reported implicit declarations of `major()` and `minor()` under `-Werror`; `<sys/sysmacros.h>` was identified as the likely missing include. Subsequent reports document four completed race pilots, a review of pasted C source, and matching recorded racer-binary hashes. The build failure is therefore historical, not the current race-workload status. The C source and V2 collector are still absent from this repository; a source-to-binary reproducible build has not been established.
+
+The four pilots reported 400/400 matching V2/Falco executable-object identities, with three candidate non-snapshot pathname strings across distinct executions. The sentinel dataset yielded 100/100 offline object-predicate matches versus 99/100 pathname-predicate matches. The attempted live-rule comparison was invalid; its zero alert counts are not missed-detection evidence. See [decision validation](race-pilot.md#decision-validation--offline-result-and-live-test-limit) for provenance and remaining controls.
+
+The latest available audit preflight returned no path for `auditctl` or `ausearch`, `inactive` for `systemctl is-active auditd`, and `sudo: auditctl: command not found`. `findmnt` reported `/dev/sda1`, `ext4`, mounted at `/`. This establishes an unavailable audit comparator at that check, not an audit telemetry gap; installation, active rules, collector health, and an audit comparison run remain unverified.
 
 Before promoting these reports to reproduced results, preserve the source revision, exact kernel build/configuration, commands, raw output, and artifact hashes; rerun the corresponding controls. No bypass rate or vulnerability finding follows from these reports.
 
