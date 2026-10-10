@@ -146,7 +146,22 @@ Reported SHA-256 identifiers:
 5. `strstr(output, "TARGET_A")` / `strstr(output, "TARGET_B")` classifies unstructured output without exact PID or message validation. It is adequate for a controlled target contract, not adversarial content attestation.
 6. `#define _GNU_SOURCE` appears after two system headers; for future builds it should precede all includes. Some headers are repeated. Do not edit or rebuild the preserved pilot binary solely to clean up style.
 
-**Outstanding provenance check:** Compare `environment.json:racer_sha256` for all four pilot evidence directories to the current binary SHA-256 and inspect each `race_summary.txt` for the printed `Rename errors`, `Failed executions`, and `Unknown executions` totals. Hash equality would establish consistent binary bytes across recordings, but not prove the exact C source produced that binary. Preserve the existing `race_exec` and old evidence unchanged until this check is complete.
+### Racer-binary provenance check — complete
+
+The user ran a read-only check of `race_summary.txt` and `environment.json:racer_sha256` for all four bounded race runs, followed by `sha256sum src/mutation/race_exec`.
+
+| Evidence directory | Recorded racer SHA-256 | Rename errors | Failed executions | Unknown executions |
+| --- | --- | ---: | ---: | ---: |
+| `race-v2-falco-2_ff6nl3` | `91d6fede...8a0435e` | 0 | 0 | 0 |
+| `race-v2-falco-lqcpl51s` | `91d6fede...8a0435e` | 0 | 0 | 0 |
+| `race-v2-falco-hri9lt4b` | `91d6fede...8a0435e` | 0 | 0 | 0 |
+| `race-v2-falco-9j2z61st` | `91d6fede...8a0435e` | 0 | 0 | 0 |
+
+Full recorded racer SHA-256 for all runs and the current binary: `91d6fede61de737779c2fb523768851dd76ba264c3f8ced7cf384a1898a0435e`.
+
+**Result: PASS for the stated check.** All four runs recorded identical binary contents at provenance capture, matching the current file, and their racer summaries reported no rename failures, child execution failures, or unknown child labels. This makes a divergent racer binary or reported mutation failure an unlikely explanation for the three hybrid pathname observations. The check is based on user-supplied console evidence; it does not prove reproducible build equivalence between the pasted C source and binary, that binary bytes were immutable during each run, or absence of unobserved failures in other components. Keep the original racer and evidence directories unchanged.
+
+**Next control:** Compare the recorded `kernel`, `boot_id`, `falco_version`, `falco_service_exec`, `falco_local_rule_sha256`, `v2_object_sha256`, and `v2_reader_sha256` in the four `environment.json` files to identify environment/configuration drift before changing instrumentation.
 
 **Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlalternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
 
