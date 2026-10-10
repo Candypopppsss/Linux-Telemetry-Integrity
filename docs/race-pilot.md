@@ -28,6 +28,28 @@ The two named paths in the pilot were `race_exec` (requested) and `alternate` (e
 
 The two reported `rlternate` values are candidates for a non-snapshot pathname representation because neither path was assigned that basename. A later read-only verifier was run on the saved `journalctl -o cat` text (`falco_window.log`) and `correlation.csv`; the user-reported console output showed 100 distinct target PIDs, 100 unique saved Falco records, and zero comparison failures. It reproduced `rlternate` in the **saved journal text** at trial 6/PID 10649 and trial 65/PID 10709, not only in the derived CSV. Both target programs self-reported A and both Falco inode fields matched V2 inode 1044775. The string `rlternate` could reflect a hybrid between `race_exec` and `alternate`, but the journal export is downstream of eBPF event creation; this does not establish the original ring-buffer event bytes or the exact alteration stage. Reproduction remains required. The pilot did not observe executable-object misattribution or demonstrate a detection-rule bypass.
 
+## Second independent 100-trial run
+
+A second run was completed on 2026-10-10 using the previously committed `src/mutation/lti_race_v2_falco.py` runner. Its evidence locator is `raw/race-v2-falco-lqcpl51s` (retained on the research VM, not independently archived here).
+
+| Metric | Run 1 | Run 2 | Both runs |
+| --- | ---: | ---: | ---: |
+| Target executions | 100 | 100 | 200 |
+| Self-reported A / B | 43 / 57 | 42 / 58 | 85 / 115 |
+| Trials with recorded exchange overlap | 99 | 98 | 197 |
+| Correct V2/Falco executable-object attribution | 100 | 100 | 200 |
+| Inode misattributions | 0 | 0 | 0 |
+| Missing Falco records | 0 | 0 | 0 |
+| Falco resolved basename `race_exec` | 69 | 59 | 128 |
+| Falco resolved basename `alternate` | 29 | 41 | 70 |
+| Falco resolved basename `rlternate` | 2 | 0 | 2 |
+
+Run 2 reported Falco target events=100, V2 health/accounting=PASS, no V2 counter errors, zero missing/duplicate/uncorrelatable events, and `Pilot measurement validity: PASS`. Its path relation counts were `all_equal=59` and `proc_equals_trusted_filename_differs=41`. A subsequent read-only `verify_race_paths.py` comparison against the saved journal text found 100 unique original Falco records for 100 trials, zero comparison failures, and **zero** non-snapshot basename candidates; it counted `race_exec`=59 and `alternate`=41 for each of `proc_exepath` and `evt_trusted_exepath`.
+
+**Interpretation:** The second run is a *negative reproduction* of the rare `rlternate` string, not an invalid experiment or evidence that the first two journal observations were CSV artifacts. Across these two bounded runs, 2 of 200 distinct executions produced a candidate non-snapshot pathname in the saved text, while every V2/Falco executable inode attribution matched. Do not present 2/200 as an established population rate, independent field-level samples, or a detection-bypass rate. The correlation and journal export are downstream artifacts; kernel ring-buffer bytes and precise race ordering were not independently inspected.
+
+**Next verification:** Retain all evidence unchanged, run further independent same-configuration repetitions with health checks, then vary only one factor at a time (e.g., distinct equal-length sentinel basenames). Every repetition should record exact counts of object mismatches, missing records, expected path switches, and non-snapshot basename strings separately.
+
 ### Independent field accounting
 
 The verifier printed four field-level candidates, **not four independent executions**: the same two `rlternate` strings appeared once per PID in `proc_exepath` and `evt_trusted_exepath`. In `falcosecurity/libs` 0.26.0, libsinsp's successful-exec parser copies `trusted_exepath` into the thread's `exepath` state; the two Falco fields are not independent kernel observations. Compare independent file-object evidence using V2 `mm->exe_file` device/inode instead.
