@@ -50,9 +50,9 @@ Run 2 reported Falco target events=100, V2 health/accounting=PASS, no V2 counter
 
 **Next verification:** Retain all evidence unchanged, run further independent same-configuration repetitions with health checks, then vary only one factor at a time (e.g., distinct equal-length sentinel basenames). Every repetition should record exact counts of object mismatches, missing records, expected path switches, and non-snapshot basename strings separately.
 
-## Third independent 100-trial run — raw path triage pending
+## Third independent 100-trial run — raw path triage complete
 
-A third run completed on 2026-10-10 with the same existing runner. The evidence locator is `raw/race-v2-falco-hri9lt4b` (research VM only; artifact bytes not imported into this repository). The user shared its console summary but has not yet supplied the separate raw-path triage report.
+A third run completed on 2026-10-10 with the same existing runner. The evidence locator is `raw/race-v2-falco-hri9lt4b` (research VM only; artifact bytes not imported into this repository). The user shared its console summary and then supplied the separate raw-path triage output.
 
 | Reported metric | Run 3 |
 | --- | ---: |
@@ -69,24 +69,17 @@ A third run completed on 2026-10-10 with the same existing runner. The evidence 
 | `all_equal` path relation | 75 |
 | `proc_equals_trusted_filename_differs` path relation | 25 |
 
-The runner reported V2 health/accounting **PASS**, no V2 counter errors, pilot accounting **CONSISTENT**, and measurement validity **PASS**. These path relation categories establish that the resolved path matched the supplied filename 75 times and differed 25 times; they do **not** identify which resolved basenames occurred. In particular, the third run cannot yet be classified as positive or negative reproduction of the `rlternate` string.
+The runner reported V2 health/accounting **PASS**, no V2 counter errors, pilot accounting **CONSISTENT**, and measurement validity **PASS**. A subsequent user-executed, read-only `verify_race_paths.py` check compared `correlation.csv` with saved `falco_window.log` by PID: 100 trial PIDs, 100 unique original Falco records, zero comparison failures, and **zero non-snapshot basename candidates**. Both `proc_exepath` and `evt_trusted_exepath` yielded `race_exec`=75 and `alternate`=25. This is a negative reproduction of `rlternate` under the same test configuration.
 
-### Three-run aggregate (pending Run 3 basename triage)
+### Three-run aggregate — closed pilot baseline
 
 - 300 bounded executions; 139 A and 161 B self-reports; 294 trials with recorded exchange overlap.
 - 300 correct V2/Falco file-object attributions; zero observed misattributions, missing records or duplicates under the runner's criteria.
 - `all_equal` path relations: 69 + 59 + 75 = **203**.
 - Resolved path differing from requested filename: 31 + 41 + 25 = **97**. These are not automatically anomalies.
-- Two non-snapshot `rlternate` strings have been corroborated in the **saved Falco journal text** of Run 1; Run 2 yielded zero; Run 3 remains **untriaged**.
+- Two non-snapshot `rlternate` strings have been corroborated in **saved Falco journal text** from Run 1 (two distinct PIDs; each appears in both `proc_exepath` and `evt_trusted_exepath`). Runs 2 and 3 yielded zero non-snapshot basenames. Across 300 executions, 95 resolved basenames were the expected exchange partner `alternate`, 203 matched the requested basename `race_exec`, and two were the candidate hybrid `rlternate`. This 2/300 observed proportion is not an established anomaly rate.
 
-**Next verification command (on the Debian VM):**
-
-```bash
-cd ~/linux-telemetry-integrity
-python3 analysis/verify_race_paths.py \
-  raw/race-v2-falco-hri9lt4b \
-  | tee raw/race-v2-falco-hri9lt4b/path_triage.txt
-```
+**Next controlled experiment:** Keep the original three evidence directories unchanged. Repeat the workload with *only* the two pathname basenames varied to equal-length, disjoint sentinel names; preserve the original runner and add a variant. Update the raw-path verifier to obtain the two permitted basenames from the run's recorded `environment.json`, otherwise all legitimate sentinel names would be misclassified.
 
 Preserve the original evidence. Read-only comparison against the saved journal text does not prove which internal kernel instrumentation stage generated a non-snapshot string. No rate extrapolation, file-object bypass, or policy-impact claim is supported yet.
 
