@@ -40,6 +40,21 @@ Coverage is limited to one single-threaded `execve()` attempt per case. The cont
 
 The experiment does not change monitoring attachments, audit rules, or daemon configuration. No measured bypass rate or product defect is established.
 
+## Reported project results
+
+These results come from user-posted reports in the project conversation, retrieved on 2026-10-10. Timestamps below identify the messages in UTC, not independently verified execution times. The underlying source revisions, raw artifacts, and kernel configurations were unavailable for this review. These reports do not validate the repository's bpftrace scaffold.
+
+| Report timestamp (UTC) | Control | User-reported result | Scope |
+| --- | --- | --- | --- |
+| 2026-10-10 04:43:52 | Failed execution, debug transport | Valid images A and B each had LSM=1 and EXEC=1 with matching identities. Invalid ELF returned `ENOEXEC` (8), with LSM=1 and EXEC=0. Report: PASS. | Debug control only; does not validate ring-buffer delivery. |
+| 2026-10-10 05:02:33 | V2 static baseline, Debian VM | Expected=100, correct=100; missing, mismatched, and duplicate records=0. Report: PASS. | One static 100-execution run; does not establish race coverage or universal loss-free collection. |
+
+The V2 report identifies `raw/v2-baseline-tjisapin` as its local evidence directory. It reports seen=submitted=received=written=100, accounting CONSISTENT, and zero read errors, missing task/mm/exe/inode/superblock counters, reservation failures, malformed records, and write errors. The directory is an evidence locator, not an artifact included in this repository.
+
+The V2 failed-execution control remains a proposed next step; no completed result was retrieved. A separate user-posted build failure for `src/mutation/race_exec.c` reports implicit declarations of `major()` and `minor()` under `-Werror`. That source is absent from this repository, and no confirmed build fix or completed race result was retrieved.
+
+Before promoting these reports to reproduced results, preserve the source revision, exact kernel build/configuration, commands, raw output, and artifact hashes; rerun the corresponding controls. No bypass rate or vulnerability finding follows from these reports.
+
 ## Defensive interpretation
 
 | Observation | Interpretation |

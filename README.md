@@ -4,6 +4,8 @@ Validation controls for Linux execution telemetry. The current experiment compar
 
 **Status:** control workload, observer, and validator implemented. Kernel tracing remains unverified for this scaffold. No vulnerability finding is claimed.
 
+Separate user-reported debug and V2 static results are recorded in [methodology](docs/methodology.md#reported-project-results); their source and raw artifacts have not been independently reviewed.
+
 ## Scope
 
 | Control | Syscall entries | Completed transitions | Failure return |
