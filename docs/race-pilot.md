@@ -83,6 +83,35 @@ The runner reported V2 health/accounting **PASS**, no V2 counter errors, pilot a
 
 Preserve the original evidence. Read-only comparison against the saved journal text does not prove which internal kernel instrumentation stage generated a non-snapshot string. No rate extrapolation, file-object bypass, or policy-impact claim is supported yet.
 
+## Disjoint-filename sentinel variation — non-snapshot path observed
+
+**Date:** 2026-10-10. **Evidence locator:** `raw/race-v2-falco-9j2z61st` (Debian VM only; raw files not independently imported into this repository). This run used the separately saved `src/mutation/lti_race_v2_falco_sentinels.py` and the per-run metadata-aware `src/tests/verify_race_paths_sentinels.py`. The existing V2 collector, Falco rule, and original three evidence directories were not intentionally changed.
+
+The two exchange-path basenames were **`raven0000`** (requested exec pathname) and **`tulip1111`** (alternate). Both names have length nine; their character sets are disjoint. The race runner invoked 100 successful trials, with A=42 / B=58 self-reports, 77 recorded exchange overlaps, and 100/100 matching V2/Falco executable-object identities. Missing/duplicate/uncorrelatable/representation-inconsistent records and V2 counter errors were all zero; collector health and pilot accounting passed. The runner's path relationships were `all_equal=77` and `proc_equals_trusted_filename_differs=23`.
+
+A read-only comparison of `correlation.csv` against the saved `falco_window.log` found 100 unique Falco records for the 100 target PIDs and **zero comparison failures**. For *each* of `proc_exepath` and `evt_trusted_exepath`, the reported basenames were `raven0000`=77, `tulip1111`=22, and **`taven0000`=1**. That anomalous string appeared in both derived fields for the **same single execution**, not two independent trials:
+
+| Field | Reported evidence |
+| --- | --- |
+| Trial / PID | 25 / 12548 |
+| Executable self-report | B |
+| V2 `mm->exe_file` inode | 1044816 |
+| Falco `proc.exe_ino`, `evt.arg.exe_ino` | 1044816 / 1044816 |
+| Requested `evt.arg.filename` | `.../raven0000` |
+| Resolved `proc.exepath`, `evt.arg.trusted_exepath` | `.../taven0000` |
+| Saved Falco journal line | 38 |
+| Correlation comparison failures | 0 |
+
+The path string **`taven0000`** has the first character of `tulip1111` and the remaining eight characters of `raven0000`. Neither configured exchange-path basename was `taven0000`. Given the expected exchange-only workload, this is a stronger cross-workload corroboration of *non-snapshot pathname representation* than the original `rlternate` candidates: it arises with newly chosen, disjoint names and the opposite executable object (B rather than A). The exact provenance of the anomalous path bytes still has not been captured at the kernel-ring-buffer boundary.
+
+### Combined bounded evidence
+
+Across **four** 100-trial runs (three original-name runs plus this sentinel variation): **400/400** executable-object identities matched V2 and Falco, with zero target-event misses/duplicates by the runner's PID-level checks. There are now **three candidate non-snapshot pathnames in three distinct executions**: two `rlternate` occurrences in Run 1 and one `taven0000` in the sentinel run; the two original-name repetitions produced none. Do not use 3/400 as a population-level frequency, detection-evasion probability, or independence estimate; the runs were few, not a randomized benchmark, and the resolved-path fields share a common derivation.
+
+**Mechanism hypothesis, not a confirmed root cause:** Falco's modern eBPF `trusted_exepath` code reconstructs a path by walking and reading dentry names without locking against concurrent rename. In the code for `falcosecurity/libs` 0.26.0, this limitation is expressly documented. The hybrid name is consistent with observing a namespace name during a concurrent update, but the raw kernel event bytes and exact interleaving remain unverified. No inode confusion or real-world policy bypass has been demonstrated.
+
+**Next gate:** Inspect the exact compiled racer source to confirm it only exchanges the two pathnames; independently repeat the sentinel variant and preserve the complete raw artifacts and code hashes. Test a concrete detection decision only after isolating the pathname's collection origin and its security-rule dependency.
+
 ### Independent field accounting
 
 The verifier printed four field-level candidates, **not four independent executions**: the same two `rlternate` strings appeared once per PID in `proc_exepath` and `evt_trusted_exepath`. In `falcosecurity/libs` 0.26.0, libsinsp's successful-exec parser copies `trusted_exepath` into the thread's `exepath` state; the two Falco fields are not independent kernel observations. Compare independent file-object evidence using V2 `mm->exe_file` device/inode instead.
