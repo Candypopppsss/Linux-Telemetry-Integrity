@@ -118,6 +118,38 @@ The verifier printed four field-level candidates, **not four independent executi
 
 - [Falco libs 0.26.0 userspace exec parser](https://github.com/falcosecurity/libs/blob/0.26.0/userspace/libsinsp/parsers.cpp)
 
+## Mutation runner source review — user-provided C source
+
+The researcher supplied the complete `src/mutation/race_exec.c` as two consecutive terminal excerpts (`sed -n '1,260p'` and `sed -n '261,520p'`) on 2026-10-10. This review is of those pasted source excerpts, not a separately fetched VM filesystem or a completed source-to-binary reproducible build.
+
+Reported SHA-256 identifiers:
+
+| Local artifact | SHA-256 |
+| --- | --- |
+| `src/mutation/race_exec.c` | `22ba59cd546d37d07e0d1d2ce7cb269d673974c3bc56638a418711fe2a52a95e` |
+| `src/mutation/race_exec` | `91d6fede61de737779c2fb523768851dd76ba264c3f8ced7cf384a1898a0435e` |
+
+### Scope and positive controls
+
+- The mutation thread repeatedly invokes `syscall(SYS_renameat2, AT_FDCWD, contested, AT_FDCWD, alternate, RENAME_EXCHANGE)`. In the supplied C implementation there are **no other mutator writes, renames, unlink operations, or filename-generation routines**. Assuming only this mutator modifies those two entries, exchanges do not intentionally introduce a third pathname basename.
+- The main thread uses `fork()`, redirects stdout/stderr through a pipe, and invokes `execve(contested, ...)`. It categorizes the resulting short output as A/B/UNKNOWN and records the child PID, exit status, start/end timestamps, before/after pathname inode snapshots, and exchange counters per trial.
+- The mutation thread is stopped by an atomic flag and joined; the shared counters are atomic. Relaxed ordering is appropriate for standalone counters and a stop flag in this design.
+- A `stat(contested)` before or after the trial observes whatever occupies that **pathname** at that instant; these values are not an independent truth source for the executable object selected by the kernel. The V2 successful-exec `mm->exe_file` observation is the designated object reference.
+- Nonzero `exchanges_after - exchanges_before` indicates counter progression over a broad trial interval, **not** a proven overlap with any particular Falco path-reconstruction instruction.
+
+### Limitations to address in a future version
+
+1. `identity()` return values are ignored in both before/after calls; a failed `stat()` leaves initialized zero fields in the CSV without a separate error indication.
+2. The mutation thread counts failed `renameat2` operations, but `main()` only prints the total; nonzero `Rename errors` is not a nonzero process exit code, and the outer Python pilot validator does not enforce a rename-error threshold.
+3. If `pipe()`, `fork()`, or `waitpid()` fails, the loop breaks but `main()` eventually returns zero. The Python runner rejects an incomplete number of trials, providing a partial downstream check; the C runner should fail closed independently.
+4. The pipe `read()` loop does not report non-EINTR errors separately, nor is a full buffer explicitly flagged; write/flush/close errors on the CSV are not checked. Under the trusted small A/B target output these issues are unlikely to alter the successful bounded runs, but need remediation before scaling.
+5. `strstr(output, "TARGET_A")` / `strstr(output, "TARGET_B")` classifies unstructured output without exact PID or message validation. It is adequate for a controlled target contract, not adversarial content attestation.
+6. `#define _GNU_SOURCE` appears after two system headers; for future builds it should precede all includes. Some headers are repeated. Do not edit or rebuild the preserved pilot binary solely to clean up style.
+
+**Outstanding provenance check:** Compare `environment.json:racer_sha256` for all four pilot evidence directories to the current binary SHA-256 and inspect each `race_summary.txt` for the printed `Rename errors`, `Failed executions`, and `Unknown executions` totals. Hash equality would establish consistent binary bytes across recordings, but not prove the exact C source produced that binary. Preserve the existing `race_exec` and old evidence unchanged until this check is complete.
+
+**Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlalternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
+
 ## Implementation hypothesis
 
 Falco 0.45.0 includes `falcosecurity/libs` 0.26.0. In its modern eBPF implementation, successful-exec telemetry stores `trusted_exepath` through `auxmap__store_task_exe_file_path`, which obtains the executable file path and invokes an approximate dentry-walking reconstruction. The implementation comments expressly note that it cannot lock pathname components and can encounter races. This is a source-supported *mechanism to investigate*, not proof that it produced the two recorded strings.
