@@ -1,0 +1,23 @@
+// Laboratory filter only. Run using bpftrace -c; never a fleet detection rule.
+tracepoint:syscalls:sys_enter_execve
+/pid == cpid && comm == "lti-attempt"/
+{
+    @pending[tid] = 1;
+    printf("LTI_ENTER %d %d\n", pid, tid);
+}
+
+tracepoint:sched:sched_process_exec
+/@pending[tid]/
+{
+    printf("LTI_EXEC %d %d\n", pid, tid);
+    delete(@pending[tid]);
+}
+
+tracepoint:syscalls:sys_exit_execve
+/@pending[tid]/
+{
+    printf("LTI_EXIT %d %d %d\n", pid, tid, args.ret);
+    delete(@pending[tid]);
+}
+
+END { clear(@pending); }

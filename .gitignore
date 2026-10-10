@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+build/
+raw/
+*.o
+*.so
+*.core
+core
