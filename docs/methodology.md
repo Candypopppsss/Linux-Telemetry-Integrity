@@ -1,71 +1,62 @@
 # Methodology
 
-## Claim and threat model
+## Event model
 
-The tested hypothesis is a coverage mismatch: a sensor collecting only **sched_process_exec** cannot report `execve()` attempts rejected before successful binary-handler processing. The caller requires no elevated capability to attempt execution of a permitted local file or an absent pathname. The observer requires privileged tracing access.
+The experiment tests whether completion-only telemetry covers failed execution attempts. It uses `syscalls:sys_enter_execve`, `syscalls:sys_exit_execve`, and `sched:sched_process_exec`.
 
-The experiment does not disable monitoring, modify BPF attachments, alter audit rules, or consume buffers deliberately. It evaluates the event model before considering malicious manipulation. A root adversary's ability to change the observer is outside this control's trust model.
+In Linux `v6.6`, `exec_binprm()` returns on a negative binary-handler result before `trace_sched_process_exec()`. An absent pathname fails during candidate opening; unrecognized executable text ordinarily fails with `ENOEXEC`. These failures do not reach the completion tracepoint. See the [execution path](https://github.com/torvalds/linux/blob/v6.6/fs/exec.c) and [trace event definition](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h).
 
-## Static source review
+## Controls
 
-Review upstream Linux tag `v6.6`, `fs/exec.c`, specifically `do_execveat_common()`, `bprm_execve()`, `search_binary_handler()`, and `exec_binprm()`. Record the resolved commit ID when repeating the review against a locally checked-out kernel. Distribution backports require a separate review.
+The single-threaded workload sets its comm to `lti-attempt` and calls `execve()` directly. The observer filters on `pid == cpid` and that comm, excluding the tracer's initial command launch. This caller-controlled filter is suitable only for the laboratory.
 
-`bprm_execve()` opens the execution candidate and assigns `bprm->file`. `search_binary_handler()` prepares the header buffer, calls `security_bprm_check()`, and evaluates registered **linux_binfmt** handlers. `exec_binprm()` propagates a negative handler result before reaching the scheduler execution tracepoint. Interpreter rewrites can invoke the handler path multiple times. [S1]
-
-An absent pathname fails during candidate opening. An executable file containing unrecognized text without a shebang ordinarily fails binary-format recognition with `ENOEXEC`. A configured binfmt_misc handler can change that result; unexpected behavior invalidates the specified baseline. [S1, S3]
-
-An LSM check is neither syscall entry nor proof of a completed image transition. An opening failure can precede `security_bprm_check()`. A later format failure can occur after it. This repository does not supply a BPF LSM program and makes no LSM record-count claim. [S1]
-
-## Runtime state transition
-
-The C workload sets its comm to `lti-attempt` and calls `execve()` directly. This prevents libc shell fallback and separates the controlled attempt from bpftrace's initial command launch. The observer additionally filters on `pid == cpid`; it is intentionally restricted to the direct child.
-
-| Stage | Successful control | Invalid-image control | Absent-path control |
+| Stage | Valid executable | Invalid format | Absent pathname |
 | --- | --- | --- | --- |
-| Before attempt | Original task image; no pending map entry | Same | Same |
-| Syscall entry | `@pending[tid]=1`; `LTI_ENTER` | Same | Same |
-| Candidate open | Candidate assigned to `bprm->file` | Candidate assigned | Opening returns error |
-| Binary handler | Accepts the control binary | Returns `-ENOEXEC` | Not reached |
-| Scheduler completion hook | `LTI_EXEC`; pending entry deleted | Not reached | Not reached |
-| Failure exit hook | Ignored after completion | `LTI_EXIT ... -8`; entry deleted | `LTI_EXIT ... -2`; entry deleted |
-| Workload ground truth | New image prints success | Original image prints errno 8 | Original image prints errno 2 |
+| Syscall entry | Set pending TID; emit `LTI_ENTER` | Same | Same |
+| Candidate opening | Succeeds | Succeeds | Fails |
+| Binary handler | Accepts image | Returns `-ENOEXEC` | Not reached |
+| Outcome | `LTI_EXEC` | `LTI_EXIT ... -8` | `LTI_EXIT ... -2` |
+| Workload marker | `LTI_RESULT success` | `LTI_RESULT errno=8` | `LTI_RESULT errno=2` |
 
-The observer deletes pending state at successful completion. It does not depend on the presence or absence of a subsequent successful syscall-exit event. Linux `execve()` does not return to the old userspace image on success. [S3]
+The observer deletes pending state at the outcome. It does not depend on a successful syscall-exit event after completion. The workload marker reports the result independently of probe logic, but shares the captured output stream.
 
-```text
-# Illustrative records only; PID/TID values are synthetic.
-# Successful image transition:
-LTI_ENTER 100 100
-LTI_EXEC 100 100
-LTI_RESULT success
+## Acceptance criteria
 
-# Format rejection:
-LTI_ENTER 101 101
-LTI_EXIT 101 101 -8
-LTI_RESULT errno=8
+Each case requires a clean tracer exit, empty stderr, exactly one entry followed by one expected outcome, matching PID/TID, and exactly one matching workload marker. Failure cases must return the expected negative errno. All three cases must pass before interpreting coverage.
+
+Retain the manifest, raw traces, diagnostics, kernel build configuration, and tracepoint `format` files. Record the exact kernel revision when reviewing distribution kernels or backports.
+
+To revalidate a saved invalid-image trace, substitute its actual path:
+
+```bash
+python3 src/tests/validate.py raw/exec-control-REPLACE/invalid.log --errno 8
 ```
 
-## Transport and confounders
+## Limits
 
-The prototype uses bpftrace `printf()` and its perf-buffer transport with 64 pages per CPU. This is not a BPF ring-buffer starvation test. Both reference and completion records share the same tracer, so they are not independent evidence against transport loss. [S4]
+The observer uses bpftrace's perf-buffer transport, with 64 pages per CPU. It does not test `BPF_MAP_TYPE_RINGBUF` or deliberate buffer pressure. Entry and outcome records share one tracer; they cannot independently rule out transport loss.
 
-Treat lost-event messages, helper errors, attachment failures, timeouts, and incomplete records as invalid runs. A silent error is still possible; three bounded controls do not prove a transport cannot lose data. A production experiment requires independently collected workload truth and explicit producer/consumer health counters.
+Coverage is limited to one single-threaded `execve()` attempt per case. The controls do not cover `execveat()`, interpreter chains, nonleader-thread execution, namespace translation, TID reuse, or failures after the point of no return. Filenames are not immutable executable-object identities.
 
-The workload is single-threaded, with one attempt per process. Production execution from a nonleader thread can change task IDs during exec. PID namespace translation, TID reuse, interpreter resolution, compat syscalls, `execveat()`, and failure after the point of no return require separate controls. [S1, S2, S3]
+The experiment does not change monitoring attachments, audit rules, or daemon configuration. No measured bypass rate or product defect is established.
 
-## Acceptance criteria and metrics
+## Defensive interpretation
 
-Accept a control only when the tracer exits cleanly, stderr is empty, exactly one entry and one corresponding outcome are present, PID/TID match, and the workload result agrees with the intended result. Require all three controls to pass before interpreting completion-only coverage.
+| Observation | Interpretation |
+| --- | --- |
+| Entry and negative exit without completion | Expected failed attempt |
+| Entry and completion | Completed image transition |
+| Independently confirmed success without completion | Collection gap requiring investigation |
+| Unmatched entry | Indeterminate; inspect lifecycle, identity mapping, and loss |
+| Unexpected attachment or policy change | Possible monitoring impairment; correlate actor and maintenance records |
 
-| Metric | Definition | Current measured value |
-| --- | --- | --- |
-| Attempt coverage | Observed entries / independently confirmed attempts | Not measured under BPF |
-| Failure coverage | Matched failure exits / confirmed failed attempts | Not measured under BPF |
-| Completion coverage | Completion records / confirmed successful transitions | Not measured under BPF |
-| Invalid runs | Runs failing health or correlation criteria | Not measured under BPF |
+A production collector should distinguish attempts, failures, and completions; correlate process identity across lifecycle changes; and export attachment, transport, queue, and exporter health. The laboratory comm filter must not become a production security boundary.
 
-A missing completion accompanied by a verified negative syscall result is expected semantics. A missing completion after independently confirmed successful execution is a collection defect candidate. Do not classify either as tampering without attachment, policy, or collector evidence.
+If audit is used as a comparator, preserve its rules, status, backlog settings, and lost-counter deltas. Success-only audit rules cannot validate failed-attempt coverage. Journal silence is not evidence that an execution attempt did not occur.
 
 ## References
 
-Source labels S1–S6 resolve to the versioned source and primary documentation links in [README](../README.md#sources).
+- [Linux v6.6 execution path](https://github.com/torvalds/linux/blob/v6.6/fs/exec.c)
+- [Linux v6.6 scheduler trace events](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h)
+- [execve(2)](https://man7.org/linux/man-pages/man2/execve.2.html)
+- [bpftrace 0.21 documentation](https://bpftrace.org/docs/0.21)
