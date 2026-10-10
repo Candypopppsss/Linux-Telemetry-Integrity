@@ -1,6 +1,6 @@
 # Rename/exec pilot: object identity and pathname representation
 
-**Status:** User-reported pilot, 2026-10-10. The raw evidence remains on the research VM and has not been independently reviewed from this repository. The candidate anomaly is not a confirmed security defect.
+**Status:** User-reported pilot and subsequent read-only text-level corroboration, 2026-10-10. The VM's raw evidence has not been independently ingested into this repository. The candidate anomaly is not a confirmed security defect.
 
 ## Measurement
 
@@ -26,7 +26,13 @@
 
 The two named paths in the pilot were `race_exec` (requested) and `alternate` (exchange partner). The 29 `alternate` readings can occur when an already-selected file object changes pathname during the rename workload. They do **not** establish an integrity failure.
 
-The two reported `rlternate` values are candidates for a non-snapshot pathname representation because neither path was assigned that basename. They require comparison against unmodified Falco journal output, inspection of the exact raw strings/bytes, and independent reproduction. Until then, a parser, renderer, or journal artifact remains possible. The pilot did not observe executable-object misattribution or demonstrate a detection-rule bypass.
+The two reported `rlternate` values are candidates for a non-snapshot pathname representation because neither path was assigned that basename. A later read-only verifier was run on the saved `journalctl -o cat` text (`falco_window.log`) and `correlation.csv`; the user-reported console output showed 100 distinct target PIDs, 100 unique saved Falco records, and zero comparison failures. It reproduced `rlternate` in the **saved journal text** at trial 6/PID 10649 and trial 65/PID 10709, not only in the derived CSV. Both target programs self-reported A and both Falco inode fields matched V2 inode 1044775. The string `rlternate` could reflect a hybrid between `race_exec` and `alternate`, but the journal export is downstream of eBPF event creation; this does not establish the original ring-buffer event bytes or the exact alteration stage. Reproduction remains required. The pilot did not observe executable-object misattribution or demonstrate a detection-rule bypass.
+
+### Independent field accounting
+
+The verifier printed four field-level candidates, **not four independent executions**: the same two `rlternate` strings appeared once per PID in `proc_exepath` and `evt_trusted_exepath`. In `falcosecurity/libs` 0.26.0, libsinsp's successful-exec parser copies `trusted_exepath` into the thread's `exepath` state; the two Falco fields are not independent kernel observations. Compare independent file-object evidence using V2 `mm->exe_file` device/inode instead.
+
+- [Falco libs 0.26.0 userspace exec parser](https://github.com/falcosecurity/libs/blob/0.26.0/userspace/libsinsp/parsers.cpp)
 
 ## Implementation hypothesis
 
@@ -38,8 +44,8 @@ Falco 0.45.0 includes `falcosecurity/libs` 0.26.0. In its modern eBPF implementa
 
 ## Verification gate
 
-1. Compare `correlation.csv` with `falco_window.log` by unique PID. Confirm each suspicious string occurs in the saved original journal line and inspect its byte encoding; preserve both the raw line and derived analysis. The original kernel event bytes are not available merely from a `journalctl -o cat` export.
-2. Repeat on a controlled pair of equal-length, disjoint sentinel basenames. Treat only non-snapshot basenames as candidates; differences between the two legitimate pathnames are expected under rename.
+1. **Text-level check completed in user-reported output:** compare `correlation.csv` with `falco_window.log` by PID. Both anomalous PIDs were found in the saved journal lines. Preserve the original export and exact tool output; the original kernel event bytes are not available merely from a `journalctl -o cat` export.
+2. Repeat the unchanged race configuration and record the denominator for independent runs, then run a controlled pair of equal-length, disjoint sentinel basenames. Treat only non-snapshot basenames as candidates; differences between two legitimate pathnames are expected under rename.
 3. For every candidate retain PID, executable self-report, V2 device/inode, Falco inode fields, path fields, exchange counters, collector health, event counts, kernel version, and exact binary hashes.
 4. Investigate decision consequences only after the representation discrepancy has been independently reproduced and a concrete rule/policy consuming the affected field is identified.
 
