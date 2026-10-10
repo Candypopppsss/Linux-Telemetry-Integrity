@@ -73,7 +73,7 @@ These checks establish recorded consistency, not reproducible source-to-binary e
 - A/B labels use substring matching, suitable only for the controlled targets.
 - `_GNU_SOURCE` appears after system headers; some includes are repeated.
 
-## Decision validation — offline result and live-test limit
+## Decision validation — offline difference and live controls
 
 | Check | Reported result | Interpretation |
 | --- | --- | --- |
@@ -87,7 +87,16 @@ The offline result was reported at 14:14:16 UTC on 2026-10-10. The discussed rul
 
 At 14:41:07 UTC, diagnostics found the temporary rule/configuration files absent and only the baseline rule recognized. Earlier service logs showed loading, but did not establish that both decision rules were active during the test. Zero alerts cannot be counted as missed detections.
 
-A separate project excerpt reports a successful comparison of the local and installed rule files. It does not include same-PID control alerts or a valid live race result. The complete rule file is not included here.
+Later user reports supplied two additional live runs:
+
+| Report timestamp (UTC, 2026-10-10) | Evidence directory under `raw/` | Correct correlations | Object alerts | Path alerts | `raven0000` / `tulip1111` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 14:44:52 | `race-v2-falco-vxet97q5` | 100 / 100 | 100 | 100 | 67 / 33 |
+| 14:50:47 | `race-v2-falco-ww7v4zpu` | 100 / 100 | 100 | 100 | 69 / 31 |
+
+Both reports recorded zero missing, duplicate, or misattributed telemetry and passing V2 validation. The second reported rename overlap in all 100 trials. The reported pathname counts contain only the two configured basenames; neither run reproduced the hybrid pathname or an object/path alert-count difference.
+
+These counts supersede the earlier absence of reported live decision alerts. They are user-reported conversation results, not independently revalidated VM artifacts. Underlying PID-level validation output was not recovered; aggregate alert counts alone do not establish exactly one baseline, object, and path alert per execution. The complete rule file and effective configuration for these runs remain unavailable here. No live detection bypass is established.
 
 ## Mechanism hypothesis
 
@@ -113,7 +122,7 @@ For saved evidence, use `src/tests/verify_race_paths.py` on original-name runs a
 
 1. Archive the complete source/build package and raw evidence with hashes; preserve the four original runs.
 2. Repeat the sentinel run and capture evidence closer to the kernel event boundary.
-3. Verify active decision rules and `rule_matching: all`; require one object and one path alert for the same ordinary control PID before repeating the race.
+3. Archive the live-control rule/configuration files and PID-level alert join; verify active rules and `rule_matching: all` for each repeat, with one baseline, object, and path alert per ordinary control PID.
 4. Configure and validate the audit comparator described in [methodology](methodology.md#audit-status).
 
 ## References

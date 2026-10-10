@@ -2,14 +2,14 @@
 
 Linux execution-telemetry controls and a study of executable identity during concurrent pathname changes.
 
-**Research status — 2026-10-10:** four reported V2/Falco runs recorded 400/400 matching executable identities and three candidate hybrid pathnames. An offline rule comparison found one decision difference. Live detection impact and the root cause remain unverified.
+**Research status — 2026-10-10:** four reported V2/Falco runs recorded 400/400 matching executable identities and three candidate hybrid pathnames. An offline rule comparison found one decision difference. Two later reported live runs each recorded 100 object and 100 path alerts without reproducing a hybrid pathname. No live bypass is established; the root cause remains unverified.
 
 ## Experiments
 
 | Experiment | Status | Documentation |
 | --- | --- | --- |
 | Execution attempts and completed image transitions | Control code and parser tests available; kernel integration unverified | [Methodology](docs/methodology.md) |
-| V2/Falco rename–execution comparison | Four reported 100-trial runs; raw evidence retained on the research VM | [Results](docs/race-pilot.md) |
+| V2/Falco rename–execution comparison | Four initial runs and two later live controls, each 100 trials; raw evidence retained on the research VM | [Results](docs/race-pilot.md) |
 | Audit comparison | Service active, auditing enabled, no rules loaded; comparison pending | [Audit status](docs/methodology.md#audit-status) |
 
 ## Run the execution controls
