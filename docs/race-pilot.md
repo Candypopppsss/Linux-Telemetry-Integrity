@@ -1,223 +1,124 @@
-# Rename/exec pilot: object identity and pathname representation
+# Rename/exec pilot
 
-**Status:** User-reported pilot and subsequent read-only text-level corroboration, 2026-10-10. The VM's raw evidence has not been independently ingested into this repository. The candidate anomaly is not a confirmed security defect.
+## Scope
 
-## Measurement
+Compare the executable object selected during `execve()` with Falco's pathname representation while two directory entries are exchanged using `renameat2(RENAME_EXCHANGE)`.
 
-- Environment: Debian 13.7, Linux `6.12.111+deb13-amd64`, ext4; Falco `0.45.0`, modern eBPF engine.
-- Workload: 100 executions of a pathname concurrently exchanged with a second pathname by `renameat2(RENAME_EXCHANGE)`. Two distinct executable inodes represent A and B. The executable itself prints its A/B identity.
-- Kernel reference: the project's V2 `sched_process_exec` collector reads the successful task's `mm->exe_file` device and inode.
-- Falco comparison: PID-correlated `proc.exe_ino`, `evt.arg.exe_ino`, `proc.exepath`, `evt.arg.trusted_exepath`, and `evt.arg.filename`.
-- Local evidence identifier: `raw/race-v2-falco-2_ff6nl3` (not published). The 100-trial window is not a multi-environment validation or an exhaustive event-loss assessment.
+**Evidence status:** user-supplied terminal results and source excerpts, reviewed on 2026-10-10. Raw evidence remains on the research VM. The observations do not establish a product vulnerability or live detection bypass.
 
-## Reported results
+## Method
 
-| Metric | Reported observation |
-| --- | ---: |
-| Trials | 100 |
-| Executed A / B | 43 / 57 |
-| Trials with recorded rename overlap | 99 |
-| V2 and Falco executable-inode agreement | 100 / 100 |
-| Missing, duplicate, or uncorrelatable target events | 0 |
-| Falco resolved path matching requested pathname | 69 |
-| Falco resolved path differing from requested pathname | 31 |
-| Resolved basename `alternate` | 29 |
-| Resolved basename `rlternate` | 2 |
+Two executable inodes print distinct A/B labels. The racer exchanges their pathnames while launching 100 child executions per run. The V2 `sched_process_exec` collector reads the successful task's `mm->exe_file` device/inode. The runner correlates each child PID with Falco's `proc.exe_ino`, `evt.arg.exe_ino`, `proc.exepath`, `evt.arg.trusted_exepath`, and requested `evt.arg.filename`.
 
-The two named paths in the pilot were `race_exec` (requested) and `alternate` (exchange partner). The 29 `alternate` readings can occur when an already-selected file object changes pathname during the rename workload. They do **not** establish an integrity failure.
+Before/after pathname `stat()` results are snapshots, not the identity of the executed object. Exchange-counter progression measures overlap with the trial interval, not with a specific path-reconstruction instruction.
 
-The two reported `rlternate` values are candidates for a non-snapshot pathname representation because neither path was assigned that basename. A later read-only verifier was run on the saved `journalctl -o cat` text (`falco_window.log`) and `correlation.csv`; the user-reported console output showed 100 distinct target PIDs, 100 unique saved Falco records, and zero comparison failures. It reproduced `rlternate` in the **saved journal text** at trial 6/PID 10649 and trial 65/PID 10709, not only in the derived CSV. Both target programs self-reported A and both Falco inode fields matched V2 inode 1044775. The string `rlternate` could reflect a hybrid between `race_exec` and `alternate`, but the journal export is downstream of eBPF event creation; this does not establish the original ring-buffer event bytes or the exact alteration stage. Reproduction remains required. The pilot did not observe executable-object misattribution or demonstrate a detection-rule bypass.
+## Environment
 
-## Second independent 100-trial run
-
-A second run was completed on 2026-10-10 using the previously committed `src/mutation/lti_race_v2_falco.py` runner. Its evidence locator is `raw/race-v2-falco-lqcpl51s` (retained on the research VM, not independently archived here).
-
-| Metric | Run 1 | Run 2 | Both runs |
-| --- | ---: | ---: | ---: |
-| Target executions | 100 | 100 | 200 |
-| Self-reported A / B | 43 / 57 | 42 / 58 | 85 / 115 |
-| Trials with recorded exchange overlap | 99 | 98 | 197 |
-| Correct V2/Falco executable-object attribution | 100 | 100 | 200 |
-| Inode misattributions | 0 | 0 | 0 |
-| Missing Falco records | 0 | 0 | 0 |
-| Falco resolved basename `race_exec` | 69 | 59 | 128 |
-| Falco resolved basename `alternate` | 29 | 41 | 70 |
-| Falco resolved basename `rlternate` | 2 | 0 | 2 |
-
-Run 2 reported Falco target events=100, V2 health/accounting=PASS, no V2 counter errors, zero missing/duplicate/uncorrelatable events, and `Pilot measurement validity: PASS`. Its path relation counts were `all_equal=59` and `proc_equals_trusted_filename_differs=41`. A subsequent read-only `verify_race_paths.py` comparison against the saved journal text found 100 unique original Falco records for 100 trials, zero comparison failures, and **zero** non-snapshot basename candidates; it counted `race_exec`=59 and `alternate`=41 for each of `proc_exepath` and `evt_trusted_exepath`.
-
-**Interpretation:** The second run is a *negative reproduction* of the rare `rlternate` string, not an invalid experiment or evidence that the first two journal observations were CSV artifacts. Across these two bounded runs, 2 of 200 distinct executions produced a candidate non-snapshot pathname in the saved text, while every V2/Falco executable inode attribution matched. Do not present 2/200 as an established population rate, independent field-level samples, or a detection-bypass rate. The correlation and journal export are downstream artifacts; kernel ring-buffer bytes and precise race ordering were not independently inspected.
-
-**Next verification:** Retain all evidence unchanged, run further independent same-configuration repetitions with health checks, then vary only one factor at a time (e.g., distinct equal-length sentinel basenames). Every repetition should record exact counts of object mismatches, missing records, expected path switches, and non-snapshot basename strings separately.
-
-## Third independent 100-trial run — raw path triage complete
-
-A third run completed on 2026-10-10 with the same existing runner. The evidence locator is `raw/race-v2-falco-hri9lt4b` (research VM only; artifact bytes not imported into this repository). The user shared its console summary and then supplied the separate raw-path triage output.
-
-| Reported metric | Run 3 |
-| --- | ---: |
-| Target executions | 100 |
-| Self-reported A / B | 54 / 46 |
-| Unknown labels | 0 |
-| Trials with recorded exchange overlap | 97 |
-| Correct V2/Falco executable-object attribution | 100 |
-| Inode misattributions | 0 |
-| Missing V2 / Falco | 0 / 0 |
-| Duplicate V2 / Falco | 0 / 0 |
-| Representation-inconsistent / uncorrelatable | 0 / 0 |
-| Falco target events | 100 |
-| `all_equal` path relation | 75 |
-| `proc_equals_trusted_filename_differs` path relation | 25 |
-
-The runner reported V2 health/accounting **PASS**, no V2 counter errors, pilot accounting **CONSISTENT**, and measurement validity **PASS**. A subsequent user-executed, read-only `verify_race_paths.py` check compared `correlation.csv` with saved `falco_window.log` by PID: 100 trial PIDs, 100 unique original Falco records, zero comparison failures, and **zero non-snapshot basename candidates**. Both `proc_exepath` and `evt_trusted_exepath` yielded `race_exec`=75 and `alternate`=25. This is a negative reproduction of `rlternate` under the same test configuration.
-
-### Three-run aggregate — closed pilot baseline
-
-- 300 bounded executions; 139 A and 161 B self-reports; 294 trials with recorded exchange overlap.
-- 300 correct V2/Falco file-object attributions; zero observed misattributions, missing records or duplicates under the runner's criteria.
-- `all_equal` path relations: 69 + 59 + 75 = **203**.
-- Resolved path differing from requested filename: 31 + 41 + 25 = **97**. These are not automatically anomalies.
-- Two non-snapshot `rlternate` strings have been corroborated in **saved Falco journal text** from Run 1 (two distinct PIDs; each appears in both `proc_exepath` and `evt_trusted_exepath`). Runs 2 and 3 yielded zero non-snapshot basenames. Across 300 executions, 95 resolved basenames were the expected exchange partner `alternate`, 203 matched the requested basename `race_exec`, and two were the candidate hybrid `rlternate`. This 2/300 observed proportion is not an established anomaly rate.
-
-**Next controlled experiment:** Keep the original three evidence directories unchanged. Repeat the workload with *only* the two pathname basenames varied to equal-length, disjoint sentinel names; preserve the original runner and add a variant. Update the raw-path verifier to obtain the two permitted basenames from the run's recorded `environment.json`, otherwise all legitimate sentinel names would be misclassified.
-
-Preserve the original evidence. Read-only comparison against the saved journal text does not prove which internal kernel instrumentation stage generated a non-snapshot string. No rate extrapolation, file-object bypass, or policy-impact claim is supported yet.
-
-## Disjoint-filename sentinel variation — non-snapshot path observed
-
-**Date:** 2026-10-10. **Evidence locator:** `raw/race-v2-falco-9j2z61st` (Debian VM only; raw files not independently imported into this repository). This run used the separately saved `src/mutation/lti_race_v2_falco_sentinels.py` and the per-run metadata-aware `src/tests/verify_race_paths_sentinels.py`. The existing V2 collector, Falco rule, and original three evidence directories were not intentionally changed.
-
-The two exchange-path basenames were **`raven0000`** (requested exec pathname) and **`tulip1111`** (alternate). Both names have length nine; their character sets are disjoint. The race runner invoked 100 successful trials, with A=42 / B=58 self-reports, 77 recorded exchange overlaps, and 100/100 matching V2/Falco executable-object identities. Missing/duplicate/uncorrelatable/representation-inconsistent records and V2 counter errors were all zero; collector health and pilot accounting passed. The runner's path relationships were `all_equal=77` and `proc_equals_trusted_filename_differs=23`.
-
-A read-only comparison of `correlation.csv` against the saved `falco_window.log` found 100 unique Falco records for the 100 target PIDs and **zero comparison failures**. For *each* of `proc_exepath` and `evt_trusted_exepath`, the reported basenames were `raven0000`=77, `tulip1111`=22, and **`taven0000`=1**. That anomalous string appeared in both derived fields for the **same single execution**, not two independent trials:
-
-| Field | Reported evidence |
+| Component | Recorded value |
 | --- | --- |
-| Trial / PID | 25 / 12548 |
-| Executable self-report | B |
-| V2 `mm->exe_file` inode | 1044816 |
-| Falco `proc.exe_ino`, `evt.arg.exe_ino` | 1044816 / 1044816 |
-| Requested `evt.arg.filename` | `.../raven0000` |
-| Resolved `proc.exepath`, `evt.arg.trusted_exepath` | `.../taven0000` |
-| Saved Falco journal line | 38 |
-| Correlation comparison failures | 0 |
+| OS / kernel | Debian 13.7 / `6.12.111+deb13-amd64` |
+| Filesystem | ext4 |
+| Falco / libs | `0.45.0` / `0.26.0` |
+| Capture engine | Modern eBPF |
+| Plugin API / engine version | `3.12.0` / `0.65.0` |
+| Driver API / schema | `11.0.0` / `4.3.0` |
+| Default driver | `11.0.0+driver` |
 
-The path string **`taven0000`** has the first character of `tulip1111` and the remaining eight characters of `raven0000`. Neither configured exchange-path basename was `taven0000`. Given the expected exchange-only workload, this is a stronger cross-workload corroboration of *non-snapshot pathname representation* than the original `rlternate` candidates: it arises with newly chosen, disjoint names and the opposite executable object (B rather than A). The exact provenance of the anomalous path bytes still has not been captured at the kernel-ring-buffer boundary.
+## Results
 
-### Combined bounded evidence
+Each run contains 100 executions. Evidence locators are directories under `raw/` on the VM, not published artifacts.
 
-Across **four** 100-trial runs (three original-name runs plus this sentinel variation): **400/400** executable-object identities matched V2 and Falco, with zero target-event misses/duplicates by the runner's PID-level checks. There are now **three candidate non-snapshot pathnames in three distinct executions**: two `rlternate` occurrences in Run 1 and one `taven0000` in the sentinel run; the two original-name repetitions produced none. Do not use 3/400 as a population-level frequency, detection-evasion probability, or independence estimate; the runs were few, not a randomized benchmark, and the resolved-path fields share a common derivation.
+| Run | Evidence directory | A / B | Exchange overlap | Requested basename | Partner basename | Hybrid basename |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | `race-v2-falco-2_ff6nl3` | 43 / 57 | 99 | 69 | 29 | `rlternate`: 2 |
+| 2 | `race-v2-falco-lqcpl51s` | 42 / 58 | 98 | 59 | 41 | 0 |
+| 3 | `race-v2-falco-hri9lt4b` | 54 / 46 | 97 | 75 | 25 | 0 |
+| 4 | `race-v2-falco-9j2z61st` | 42 / 58 | 77 | 77 | 22 | `taven0000`: 1 |
 
-**Mechanism hypothesis, not a confirmed root cause:** Falco's modern eBPF `trusted_exepath` code reconstructs a path by walking and reading dentry names without locking against concurrent rename. In the code for `falcosecurity/libs` 0.26.0, this limitation is expressly documented. The hybrid name is consistent with observing a namespace name during a concurrent update, but the raw kernel event bytes and exact interleaving remain unverified. No inode confusion or real-world policy bypass has been demonstrated.
+Runs 1–3 use `race_exec` and `alternate`. Run 4 changes only the configured basenames to `raven0000` and `tulip1111`: equal-length names with disjoint character sets.
 
-**Next gate:** Inspect the exact compiled racer source to confirm it only exchanges the two pathnames; independently repeat the sentinel variant and preserve the complete raw artifacts and code hashes. Test a concrete detection decision only after isolating the pathname's collection origin and its security-rule dependency.
+All four runs reported 100/100 matching V2/Falco executable identities, zero missing, duplicate, uncorrelatable, or representation-inconsistent target records, and passing V2 health/accounting. Racer summaries reported zero rename errors, failed executions, and unknown labels.
 
-### Independent field accounting
+Saved-journal comparisons found 100 unique target records per run and zero comparison failures. The pathname counts above apply to each resolved-path field. Legitimate partner-name readings are expected during rename and are not anomalies. Runs 2 and 3 did not reproduce the hybrid string.
 
-The verifier printed four field-level candidates, **not four independent executions**: the same two `rlternate` strings appeared once per PID in `proc_exepath` and `evt_trusted_exepath`. In `falcosecurity/libs` 0.26.0, libsinsp's successful-exec parser copies `trusted_exepath` into the thread's `exepath` state; the two Falco fields are not independent kernel observations. Compare independent file-object evidence using V2 `mm->exe_file` device/inode instead.
+### Hybrid observations
 
-- [Falco libs 0.26.0 userspace exec parser](https://github.com/falcosecurity/libs/blob/0.26.0/userspace/libsinsp/parsers.cpp)
+| Run | Trial / PID | Self-report | V2 and Falco inode | Requested basename | Resolved basename |
+| --- | --- | --- | ---: | --- | --- |
+| 1 | 6 / 10649 | A | 1044775 | `race_exec` | `rlternate` |
+| 1 | 65 / 10709 | A | 1044775 | `race_exec` | `rlternate` |
+| 4 | 25 / 12548 | B | 1044816 | `raven0000` | `taven0000` |
 
-## Mutation runner source review — user-provided C source
+The strings occur in saved `falco_window.log` text and agree with `correlation.csv`; the sentinel observation is on saved journal line 38. Neither hybrid was an assigned basename. `taven0000` combines the first character of `tulip1111` with the remaining characters of `raven0000`.
 
-The researcher supplied the complete `src/mutation/race_exec.c` as two consecutive terminal excerpts (`sed -n '1,260p'` and `sed -n '261,520p'`) on 2026-10-10. This review is of those pasted source excerpts, not a separately fetched VM filesystem or a completed source-to-binary reproducible build.
+There are three affected executions among 400 bounded trials. This is not an estimated population frequency or bypass rate. `proc.exepath` and `evt.arg.trusted_exepath` share a derivation: libsinsp copies the successful-exec trusted path into thread state. They are not independent observations. Journal exports also do not establish the original kernel event bytes.
 
-Reported SHA-256 identifiers:
+## Provenance and source review
 
-| Local artifact | SHA-256 |
+The researcher supplied the C racer as two consecutive source excerpts. The reviewed mutation thread only exchanges the two configured paths. The main thread forks, executes the requested path, reads the A/B marker, and records PID, exit status, timestamps, inode snapshots, and exchange counters.
+
+| Artifact | Reported SHA-256 |
 | --- | --- |
 | `src/mutation/race_exec.c` | `22ba59cd546d37d07e0d1d2ce7cb269d673974c3bc56638a418711fe2a52a95e` |
 | `src/mutation/race_exec` | `91d6fede61de737779c2fb523768851dd76ba264c3f8ced7cf384a1898a0435e` |
 
-### Scope and positive controls
+All four `environment.json` files recorded the same racer-binary hash, matching the current VM binary. Kernel, boot ID, service invocation, local rule hash, and V2 object/reader hashes also matched. Falco's raw version text differed because of invocation timestamps; its stable version fields matched.
 
-- The mutation thread repeatedly invokes `syscall(SYS_renameat2, AT_FDCWD, contested, AT_FDCWD, alternate, RENAME_EXCHANGE)`. In the supplied C implementation there are **no other mutator writes, renames, unlink operations, or filename-generation routines**. Assuming only this mutator modifies those two entries, exchanges do not intentionally introduce a third pathname basename.
-- The main thread uses `fork()`, redirects stdout/stderr through a pipe, and invokes `execve(contested, ...)`. It categorizes the resulting short output as A/B/UNKNOWN and records the child PID, exit status, start/end timestamps, before/after pathname inode snapshots, and exchange counters per trial.
-- The mutation thread is stopped by an atomic flag and joined; the shared counters are atomic. Relaxed ordering is appropriate for standalone counters and a stop flag in this design.
-- A `stat(contested)` before or after the trial observes whatever occupies that **pathname** at that instant; these values are not an independent truth source for the executable object selected by the kernel. The V2 successful-exec `mm->exe_file` observation is the designated object reference.
-- Nonzero `exchanges_after - exchanges_before` indicates counter progression over a broad trial interval, **not** a proven overlap with any particular Falco path-reconstruction instruction.
+These checks establish recorded consistency, not reproducible source-to-binary equivalence, immutable runtime state, or identical scheduling. The C review identified the following implementation limits:
 
-### Limitations to address in a future version
-
-1. `identity()` return values are ignored in both before/after calls; a failed `stat()` leaves initialized zero fields in the CSV without a separate error indication.
-2. The mutation thread counts failed `renameat2` operations, but `main()` only prints the total; nonzero `Rename errors` is not a nonzero process exit code, and the outer Python pilot validator does not enforce a rename-error threshold.
-3. If `pipe()`, `fork()`, or `waitpid()` fails, the loop breaks but `main()` eventually returns zero. The Python runner rejects an incomplete number of trials, providing a partial downstream check; the C runner should fail closed independently.
-4. The pipe `read()` loop does not report non-EINTR errors separately, nor is a full buffer explicitly flagged; write/flush/close errors on the CSV are not checked. Under the trusted small A/B target output these issues are unlikely to alter the successful bounded runs, but need remediation before scaling.
-5. `strstr(output, "TARGET_A")` / `strstr(output, "TARGET_B")` classifies unstructured output without exact PID or message validation. It is adequate for a controlled target contract, not adversarial content attestation.
-6. `#define _GNU_SOURCE` appears after two system headers; for future builds it should precede all includes. Some headers are repeated. Do not edit or rebuild the preserved pilot binary solely to clean up style.
-
-### Racer-binary provenance check — complete
-
-The user ran a read-only check of `race_summary.txt` and `environment.json:racer_sha256` for all four bounded race runs, followed by `sha256sum src/mutation/race_exec`.
-
-| Evidence directory | Recorded racer SHA-256 | Rename errors | Failed executions | Unknown executions |
-| --- | --- | ---: | ---: | ---: |
-| `race-v2-falco-2_ff6nl3` | `91d6fede...8a0435e` | 0 | 0 | 0 |
-| `race-v2-falco-lqcpl51s` | `91d6fede...8a0435e` | 0 | 0 | 0 |
-| `race-v2-falco-hri9lt4b` | `91d6fede...8a0435e` | 0 | 0 | 0 |
-| `race-v2-falco-9j2z61st` | `91d6fede...8a0435e` | 0 | 0 | 0 |
-
-Full recorded racer SHA-256 for all runs and the current binary: `91d6fede61de737779c2fb523768851dd76ba264c3f8ced7cf384a1898a0435e`.
-
-**Result: PASS for the stated check.** All four runs recorded identical binary contents at provenance capture, matching the current file, and their racer summaries reported no rename failures, child execution failures, or unknown child labels. This makes a divergent racer binary or reported mutation failure an unlikely explanation for the three hybrid pathname observations. The check is based on user-supplied console evidence; it does not prove reproducible build equivalence between the pasted C source and binary, that binary bytes were immutable during each run, or absence of unobserved failures in other components. Keep the original racer and evidence directories unchanged.
-
-**Next control:** Compare the recorded `kernel`, `boot_id`, `falco_version`, `falco_service_exec`, `falco_local_rule_sha256`, `v2_object_sha256`, and `v2_reader_sha256` in the four `environment.json` files to identify environment/configuration drift before changing instrumentation.
-
-### Environment consistency — four runs
-
-The user compared seven fields from the four saved `environment.json` files on 2026-10-10. Literal JSON-string comparison reported `MATCH` for `kernel`, `boot_id`, `falco_service_exec`, `falco_local_rule_sha256`, `v2_object_sha256`, and `v2_reader_sha256`. The `falco_version` field reported `DIFFERENT` **only because the captured `falco --version` output embeds an invocation timestamp** and startup diagnostics. Inspection of all four printed strings establishes the same stable version fields:
-
-| Falco component | All four runs |
-| --- | --- |
-| Falco | `0.45.0` |
-| Libs | `0.26.0` |
-| Plugin API | `3.12.0` |
-| Engine | `0.65.0` |
-| Driver API | `11.0.0` |
-| Driver schema | `4.3.0` |
-| Default driver | `11.0.0+driver` |
-
-The observed invocation timestamps differed (17:54:38, 19:03:36, 19:08:12, and 19:16:55 on 2026-10-10), so raw `falco_version` text cannot be used as a stable version fingerprint without normalization. The boot ID and recorded Linux kernel matched for all four experiments. Recorded service invocation, rule-file hash and V2 component hashes also matched. Coupled with the previous identical racer-binary hash and zero reported rename/exec errors, these checks close the recorded configuration-drift gate for the four bounded runs.
-
-**Limits:** Matching version strings do not establish byte-identical Falco binaries or every runtime option and mutable state; a matching boot ID does not guarantee equal load, scheduling, or temporal interleaving. These checks are based on user-provided terminal output, not independent access to the VM's raw evidence.
-
-**Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
+- Before/after `stat()` failures are not checked.
+- Rename errors are printed but do not cause a failure exit; the Python runner does not enforce that count.
+- `pipe()`, `fork()`, or `waitpid()` failures can leave a zero exit status. The Python runner rejects incomplete trial counts.
+- Pipe read errors, output truncation, and CSV write/flush/close failures are not fully checked.
+- A/B labels use substring matching, suitable only for the controlled targets.
+- `_GNU_SOURCE` appears after system headers; some includes are repeated.
 
 ## Decision validation — offline result and live-test limit
 
-The project discussion retrieved on 2026-10-10 adds a decision comparison on the existing sentinel dataset `raw/race-v2-falco-9j2z61st`. These are user-reported results, not an independent rerun.
-
 | Check | Reported result | Interpretation |
 | --- | --- | --- |
-| Offline executable-inode predicate | 100 / 100 matches | Bounded object-based comparison |
-| Offline resolved-path predicate | 99 / 100 matches | Allowed basenames: `raven0000`, `tulip1111` |
-| Predicate difference | 1 / 100 | Trial 25, PID 12548, inode 1044816, resolved basename `taven0000` |
-| Decision-rule file validation | `tests/lti_decision_lab.yaml: Ok` | Syntax/configuration validation only |
-| Live-test diagnostic window | `LTI_FALCO=110`; both decision-alert markers=0 | Invalid decision comparison; no missed-detection count established |
+| Offline inode predicate | 100 / 100 matches | Object comparison on the sentinel dataset |
+| Offline path predicate | 99 / 100 matches | Accepts `raven0000` or `tulip1111` |
+| Difference | Trial 25 / PID 12548 | `taven0000` fails the path predicate |
+| Rule-file validation | `tests/lti_decision_lab.yaml: Ok` | File validation only |
+| Live diagnostic window | 110 baseline records; zero object and path alert markers | Invalid live comparison |
 
-The offline comparison was reported at 14:14:16 UTC. The hybrid-path execution matched the object predicate but not the two-name path predicate. This demonstrates a decision difference on saved fields; it does not measure live Falco alerts or establish exploitation.
+The offline result was reported at 14:14:16 UTC on 2026-10-10. The discussed rules select successful `execve`/`execveat` events requested through the race evidence directory and ending in `/raven0000`. The object predicate uses local inodes 1044775 and 1044816; the path predicate accepts either configured resolved basename. These identifiers are specific to the laboratory.
 
-The discussed laboratory rules restrict input to successful `execve`/`execveat` events with a requested path in the race evidence directory ending in `/raven0000`. The object predicate uses the recorded laboratory inodes `1044775` and `1044816`; the path predicate accepts resolved paths ending in `/raven0000` or `/tulip1111`. These identifiers are local to this experiment, not portable object identities or production rules. The complete rule file has not been imported into this repository.
+At 14:41:07 UTC, diagnostics found the temporary rule/configuration files absent and only the baseline rule recognized. Earlier service logs showed loading, but did not establish that both decision rules were active during the test. Zero alerts cannot be counted as missed detections.
 
-The diagnostic reported at 14:41:07 UTC found the temporary rule/configuration files absent and only the baseline rule recognized by the listing check. Service logs indicated earlier loading of the temporary files, but did not establish that both decision rules were active throughout the measured window. Zero object and path alerts therefore cannot be interpreted as 100 missed detections.
+A separate project excerpt reports a successful comparison of the local and installed rule files. It does not include same-PID control alerts or a valid live race result. The complete rule file is not included here.
 
-A separate retained project excerpt records a user-reported pass after comparing the local decision-rule file with its installed copy. The full check output and same-PID alert evidence are unavailable in that excerpt. Preserve this as a reported configuration-check pass; it does not close the live decision-validation gate.
+## Mechanism hypothesis
 
-Before a valid live comparison, retain the active configuration and rule hashes, verify `rule_matching: all` and recognition of both decision rules, and obtain one object alert and one path alert for the same ordinary control PID. Then repeat the bounded race with PID-correlated alerts and collector-health checks. The latest available audit preflight is recorded in [methodology](methodology.md#reported-project-results); no audit comparator result is available.
+Falco libs 0.26.0 reconstructs `trusted_exepath` through `auxmap__store_task_exe_file_path` and a dentry walk. The implementation documents that pathname components cannot be locked against concurrent rename. The hybrid strings are consistent with this limitation; their exact collection stage and interleaving remain unverified.
 
-## Implementation hypothesis
+## Reproduction dependencies
 
-Falco 0.45.0 includes `falcosecurity/libs` 0.26.0. In its modern eBPF implementation, successful-exec telemetry stores `trusted_exepath` through `auxmap__store_task_exe_file_path`, which obtains the executable file path and invokes an approximate dentry-walking reconstruction. The implementation comments expressly note that it cannot lock pathname components and can encounter races. This is a source-supported *mechanism to investigate*, not proof that it produced the recorded hybrid strings.
+The archived runners expect `~/linux-telemetry-integrity`, an active `falco-modern-bpf.service`, and these VM-local components:
 
-- [Falco 0.45.0 release and libs version](https://falco.org/blog/falco-0-45-0/)
-- [Falco libs 0.26.0 path reconstruction](https://github.com/falcosecurity/libs/blob/0.26.0/driver/modern_bpf/helpers/store/auxmap_store_params.h)
-- [Falco libs 0.26.0 successful-exec event](https://github.com/falcosecurity/libs/blob/0.26.0/driver/modern_bpf/programs/attached/events/sched_process_exec.bpf.c)
+| Path | Component |
+| --- | --- |
+| `src/reference/ringbuf_v2/oracle_reader_v2` | V2 reader |
+| `src/reference/ringbuf_v2/oracle_v2.bpf.o` | V2 BPF object |
+| `src/mutation/race_exec` | C racer |
+| `src/targets/target_a`, `src/targets/target_b` | A/B targets |
+| `/etc/falco/falco_rules.local.yaml` | Laboratory telemetry rule |
 
-## Verification gate
+The V2 source, C racer, targets, and Falco rule are not included. The original-name and sentinel scripts are retained as separate experiment variants.
 
-1. **Text-level check completed in user-reported output:** compare `correlation.csv` with `falco_window.log` by PID. Both anomalous PIDs were found in the saved journal lines. Preserve the original export and exact tool output; the original kernel event bytes are not available merely from a `journalctl -o cat` export.
-2. Repeat the unchanged race configuration and record the denominator for independent runs, then run a controlled pair of equal-length, disjoint sentinel basenames. Treat only non-snapshot basenames as candidates; differences between two legitimate pathnames are expected under rename.
-3. For every candidate retain PID, executable self-report, V2 device/inode, Falco inode fields, path fields, exchange counters, collector health, event counts, kernel version, and exact binary hashes.
-4. Investigate decision consequences only after the representation discrepancy has been independently reproduced and a concrete rule/policy consuming the affected field is identified.
+For saved evidence, use `src/tests/verify_race_paths.py` on original-name runs and `src/tests/verify_race_paths_sentinels.py` on sentinel runs. The latter requires `environment.json:sentinel_basenames`.
 
-**Interpretation:** The current evidence supports correct file-object attribution in a bounded trial and a testable pathname-reconstruction hypothesis. It does not support a generic Falco bypass claim.
+## Outstanding work
+
+1. Archive the complete source/build package and raw evidence with hashes; preserve the four original runs.
+2. Repeat the sentinel run and capture evidence closer to the kernel event boundary.
+3. Verify active decision rules and `rule_matching: all`; require one object and one path alert for the same ordinary control PID before repeating the race.
+4. Configure and validate the audit comparator described in [methodology](methodology.md#audit-status).
+
+## References
+
+- [Falco 0.45.0 release](https://falco.org/blog/falco-0-45-0/)
+- [Libs 0.26.0 path reconstruction](https://github.com/falcosecurity/libs/blob/0.26.0/driver/modern_bpf/helpers/store/auxmap_store_params.h)
+- [Libs 0.26.0 successful-exec event](https://github.com/falcosecurity/libs/blob/0.26.0/driver/modern_bpf/programs/attached/events/sched_process_exec.bpf.c)
+- [Libs 0.26.0 userspace parser](https://github.com/falcosecurity/libs/blob/0.26.0/userspace/libsinsp/parsers.cpp)

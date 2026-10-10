@@ -2,31 +2,31 @@
 
 ## Event model
 
-The experiment tests whether completion-only telemetry covers failed execution attempts. It uses `syscalls:sys_enter_execve`, `syscalls:sys_exit_execve`, and `sched:sched_process_exec`.
+The execution controls compare `syscalls:sys_enter_execve`, `syscalls:sys_exit_execve`, and `sched:sched_process_exec`. In Linux v6.6, `exec_binprm()` returns on a negative binary-handler result before `trace_sched_process_exec()`. A failed attempt without a completion event is expected behavior.
 
-In Linux `v6.6`, `exec_binprm()` returns on a negative binary-handler result before `trace_sched_process_exec()`. An absent pathname fails during candidate opening; unrecognized executable text ordinarily fails with `ENOEXEC`. These failures do not reach the completion tracepoint. See the [execution path](https://github.com/torvalds/linux/blob/v6.6/fs/exec.c) and [trace event definition](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h).
+| Control | Syscall entries | Completed transitions | Failure return |
+| --- | ---: | ---: | --- |
+| Valid executable | 1 | 1 | — |
+| Invalid executable format | 1 | 0 | `-ENOEXEC` |
+| Absent pathname | 1 | 0 | `-ENOENT` |
 
-## Controls
+These are expected counts, not kernel integration results.
 
-The single-threaded workload sets its comm to `lti-attempt` and calls `execve()` directly. The observer filters on `pid == cpid` and that comm, excluding the tracer's initial command launch. This caller-controlled filter is suitable only for the laboratory.
+## Environment
 
-| Stage | Valid executable | Invalid format | Absent pathname |
-| --- | --- | --- | --- |
-| Syscall entry | Set pending TID; emit `LTI_ENTER` | Same | Same |
-| Candidate opening | Succeeds | Succeeds | Fails |
-| Binary handler | Accepts image | Returns `-ENOEXEC` | Not reached |
-| Outcome | `LTI_EXEC` | `LTI_EXIT ... -8` | `LTI_EXIT ... -2` |
-| Workload marker | `LTI_RESULT success` | `LTI_RESULT errno=8` | `LTI_RESULT errno=2` |
+The intended baseline is an isolated x86-64 VM with Linux v6.6, bpftrace 0.21.0, Python 3.10+, and a C11 compiler. Required kernel options are `CONFIG_BPF`, `CONFIG_BPF_SYSCALL`, `CONFIG_BPF_EVENTS`, `CONFIG_PERF_EVENTS`, `CONFIG_FTRACE`, `CONFIG_FTRACE_SYSCALLS`, and `CONFIG_TRACEPOINTS`.
 
-The observer deletes pending state at the outcome. It does not depend on a successful syscall-exit event after completion. The workload marker reports the result independently of probe logic, but shares the captured output stream.
+Run in the initial PID namespace with readable tracefs at `/sys/kernel/tracing`, an executable repository filesystem, and root access permitted by kernel tracing policy. No `binfmt_misc` handler should accept the invalid-image control.
 
-## Acceptance criteria
+## Collection and validation
 
-Each case requires a clean tracer exit, empty stderr, exactly one entry followed by one expected outcome, matching PID/TID, and exactly one matching workload marker. Failure cases must return the expected negative errno. All three cases must pass before interpreting coverage.
+The single-threaded C workload sets its comm to `lti-attempt` and calls `execve()` directly. The observer filters on `pid == cpid` and that comm, excluding the tracer's initial launch. This caller-controlled filter is for the laboratory only.
 
-Retain the manifest, raw traces, diagnostics, kernel build configuration, and tracepoint `format` files. Record the exact kernel revision when reviewing distribution kernels or backports.
+At entry, the observer stores pending state by TID and emits `LTI_ENTER`. Completion emits `LTI_EXEC`; a failed return emits `LTI_EXIT` with the negative errno. Either outcome clears pending state. The target or caller emits a separate `LTI_RESULT` marker in the same output stream.
 
-To revalidate a saved invalid-image trace, substitute its actual path:
+Each case requires a clean tracer exit, empty stderr, one entry followed by one expected outcome, matching PID/TID, and one matching workload marker. The runner uses 64 perf-buffer pages per CPU and a 30-second timeout per case. It saves traces, diagnostics, and a manifest with trace hashes under `raw/exec-control-*`. An `INCOMPLETE` manifest is invalid.
+
+Retain the kernel build/configuration and tracepoint `format` files with each run. To revalidate a saved invalid-image trace:
 
 ```bash
 python3 src/tests/validate.py raw/exec-control-REPLACE/invalid.log --errno 8
@@ -34,49 +34,53 @@ python3 src/tests/validate.py raw/exec-control-REPLACE/invalid.log --errno 8
 
 ## Limits
 
-The observer uses bpftrace's perf-buffer transport, with 64 pages per CPU. It does not test `BPF_MAP_TYPE_RINGBUF` or deliberate buffer pressure. Entry and outcome records share one tracer; they cannot independently rule out transport loss.
+The control covers one single-threaded `execve()` attempt per case. It excludes `execveat()`, interpreter chains, nonleader-thread execution, namespace translation, TID reuse, and failures after the point of no return.
 
-Coverage is limited to one single-threaded `execve()` attempt per case. The controls do not cover `execveat()`, interpreter chains, nonleader-thread execution, namespace translation, TID reuse, or failures after the point of no return. Filenames are not immutable executable-object identities.
-
-The experiment does not change monitoring attachments, audit rules, or daemon configuration. No measured bypass rate or product defect is established.
+Entry and outcome share one tracer and perf-buffer transport, so they do not independently exclude collection loss. The control does not test `BPF_MAP_TYPE_RINGBUF`, buffer pressure, attachment changes, or daemon configuration changes.
 
 ## Reported project results
 
-These results come from user-posted reports in project conversations, reconciled on 2026-10-10. Timestamps below identify the messages in UTC, not independently verified execution times. Raw artifacts and a complete reproducible source/build package remain unavailable. Subsequent racer source excerpts and recorded environment checks are reviewed in [race-pilot.md](race-pilot.md). These reports do not validate the repository's bpftrace scaffold.
+The following results were supplied in project conversations. Timestamps identify reports in UTC, not verified execution times. Raw VM artifacts and a complete reproducible build package are not included; these reports do not validate the separate bpftrace control above.
 
-| Report timestamp (UTC) | Control | User-reported result | Scope |
-| --- | --- | --- | --- |
-| 2026-10-10 04:43:52 | Failed execution, debug transport | Valid images A and B each had LSM=1 and EXEC=1 with matching identities. Invalid ELF returned `ENOEXEC` (8), with LSM=1 and EXEC=0. Report: PASS. | Debug control only; does not validate ring-buffer delivery. |
-| 2026-10-10 05:02:33 | V2 static baseline, Debian VM | Expected=100, correct=100; missing, mismatched, and duplicate records=0. Report: PASS. | One static 100-execution run; does not establish race coverage or universal loss-free collection. |
+| Report timestamp (UTC) | Control | Reported result |
+| --- | --- | --- |
+| 2026-10-10 04:43:52 | Debug failed-execution control | Valid A/B images: LSM=1, EXEC=1, matching identities. Invalid ELF: `ENOEXEC` (8), LSM=1, EXEC=0. |
+| 2026-10-10 05:02:33 | V2 static baseline | 100 expected, 100 correct; zero missing, mismatched, or duplicate records. |
 
-The V2 report identifies `raw/v2-baseline-tjisapin` as its local evidence directory. It reports seen=submitted=received=written=100, accounting CONSISTENT, and zero read errors, missing task/mm/exe/inode/superblock counters, reservation failures, malformed records, and write errors. The directory is an evidence locator, not an artifact included in this repository.
+The V2 evidence directory is `raw/v2-baseline-tjisapin`. Reported counters were seen=submitted=received=written=100, consistent accounting, and zero read, lookup, reservation, malformed-record, and write errors. A completed V2 failed-execution result is not available.
 
-No completed V2 failed-execution result was retrieved. An earlier build failure for `src/mutation/race_exec.c` reported implicit declarations of `major()` and `minor()` under `-Werror`; `<sys/sysmacros.h>` was identified as the likely missing include. Subsequent reports document four completed race pilots, a review of pasted C source, and matching recorded racer-binary hashes. The build failure is therefore historical, not the current race-workload status. The C source and V2 collector are still absent from this repository; a source-to-binary reproducible build has not been established.
+The subsequent four race runs, racer source review, and rule comparison are recorded in [race-pilot.md](race-pilot.md). The earlier racer build failure is superseded by those completed runs; source-to-binary build equivalence remains unverified.
 
-The four pilots reported 400/400 matching V2/Falco executable-object identities, with three candidate non-snapshot pathname strings across distinct executions. The sentinel dataset yielded 100/100 offline object-predicate matches versus 99/100 pathname-predicate matches. The attempted live-rule comparison was invalid; its zero alert counts are not missed-detection evidence. See [decision validation](race-pilot.md#decision-validation--offline-result-and-live-test-limit) for provenance and remaining controls.
+## Audit status
 
-The latest available audit preflight returned no path for `auditctl` or `ausearch`, `inactive` for `systemctl is-active auditd`, and `sudo: auditctl: command not found`. `findmnt` reported `/dev/sda1`, `ext4`, mounted at `/`. This establishes an unavailable audit comparator at that check, not an audit telemetry gap; installation, active rules, collector health, and an audit comparison run remain unverified.
+The latest supplied preflight supersedes the earlier inactive-service report:
 
-Before promoting these reports to reproduced results, preserve the source revision, exact kernel build/configuration, commands, raw output, and artifact hashes; rerun the corresponding controls. No bypass rate or vulnerability finding follows from these reports.
+| Check | Reported value |
+| --- | --- |
+| `systemctl is-active auditd` | `active` |
+| `sudo auditctl -s` | `enabled 1`, `failure 1`, daemon PID 15274 |
+| Queue status | `rate_limit 0`, `backlog_limit 8192`, `lost 0`, `backlog 0` |
+| Backlog wait | `backlog_wait_time 60000`, `backlog_wait_time_actual 0` |
+| Login UID policy | `loginuid_immutable 0 unlocked` |
+| `sudo auditctl -l` | `No rules` |
+| Boot parameters | Kernel `6.12.111+deb13-amd64`; no explicit `audit=` parameter shown |
 
-## Defensive interpretation
+The unprivileged `command -v` checks printed no paths, but `sudo auditctl` executed successfully. The audit service is available; an audit comparison has not been run. A zero lost counter is a preflight snapshot, not a measurement of loss during a workload.
+
+## Interpretation
 
 | Observation | Interpretation |
 | --- | --- |
-| Entry and negative exit without completion | Expected failed attempt |
+| Entry and negative exit without completion | Failed attempt |
 | Entry and completion | Completed image transition |
 | Independently confirmed success without completion | Collection gap requiring investigation |
-| Unmatched entry | Indeterminate; inspect lifecycle, identity mapping, and loss |
-| Unexpected attachment or policy change | Possible monitoring impairment; correlate actor and maintenance records |
+| Unmatched entry | Indeterminate; check lifecycle, identity mapping, and loss |
 
-A production collector should distinguish attempts, failures, and completions; correlate process identity across lifecycle changes; and export attachment, transport, queue, and exporter health. The laboratory comm filter must not become a production security boundary.
-
-If audit is used as a comparator, preserve its rules, status, backlog settings, and lost-counter deltas. Success-only audit rules cannot validate failed-attempt coverage. Journal silence is not evidence that an execution attempt did not occur.
+Collectors should distinguish attempts, failures, and completions and report attachment, transport, queue, and exporter health. A pathname is not an immutable executable identity. For an audit comparison, retain active rules, backlog settings, and before/after lost counters; success-only rules cannot establish failed-attempt coverage.
 
 ## References
 
 - [Linux v6.6 execution path](https://github.com/torvalds/linux/blob/v6.6/fs/exec.c)
 - [Linux v6.6 scheduler trace events](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h)
 - [execve(2)](https://man7.org/linux/man-pages/man2/execve.2.html)
-- [makedev(3)](https://man7.org/linux/man-pages/man3/major.3.html)
 - [bpftrace 0.21 documentation](https://bpftrace.org/docs/0.21)
