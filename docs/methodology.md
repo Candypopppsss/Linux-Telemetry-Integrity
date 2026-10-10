@@ -51,7 +51,7 @@ These results come from user-posted reports in the project conversation, retriev
 
 The V2 report identifies `raw/v2-baseline-tjisapin` as its local evidence directory. It reports seen=submitted=received=written=100, accounting CONSISTENT, and zero read errors, missing task/mm/exe/inode/superblock counters, reservation failures, malformed records, and write errors. The directory is an evidence locator, not an artifact included in this repository.
 
-The V2 failed-execution control remains a proposed next step; no completed result was retrieved. A separate user-posted build failure for `src/mutation/race_exec.c` reports implicit declarations of `major()` and `minor()` under `-Werror`. That source is absent from this repository, and no confirmed build fix or completed race result was retrieved.
+The V2 failed-execution control remains a proposed next step; no completed result was retrieved. A separate user-posted build failure for `src/mutation/race_exec.c` reports implicit declarations of `major()` and `minor()` under `-Werror`. Linux `makedev(3)` declares both interfaces in `<sys/sysmacros.h>`; a missing include is therefore the leading diagnosis. The source is absent from this repository, so the include change and race workload remain unvalidated.
 
 Before promoting these reports to reproduced results, preserve the source revision, exact kernel build/configuration, commands, raw output, and artifact hashes; rerun the corresponding controls. No bypass rate or vulnerability finding follows from these reports.
 
@@ -74,4 +74,5 @@ If audit is used as a comparator, preserve its rules, status, backlog settings, 
 - [Linux v6.6 execution path](https://github.com/torvalds/linux/blob/v6.6/fs/exec.c)
 - [Linux v6.6 scheduler trace events](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h)
 - [execve(2)](https://man7.org/linux/man-pages/man2/execve.2.html)
+- [makedev(3)](https://man7.org/linux/man-pages/man3/major.3.html)
 - [bpftrace 0.21 documentation](https://bpftrace.org/docs/0.21)
