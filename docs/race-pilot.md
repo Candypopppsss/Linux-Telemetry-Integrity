@@ -163,6 +163,24 @@ Full recorded racer SHA-256 for all runs and the current binary: `91d6fede61de73
 
 **Next control:** Compare the recorded `kernel`, `boot_id`, `falco_version`, `falco_service_exec`, `falco_local_rule_sha256`, `v2_object_sha256`, and `v2_reader_sha256` in the four `environment.json` files to identify environment/configuration drift before changing instrumentation.
 
+### Environment consistency — four runs
+
+The user compared seven fields from the four saved `environment.json` files on 2026-10-10. Literal JSON-string comparison reported `MATCH` for `kernel`, `boot_id`, `falco_service_exec`, `falco_local_rule_sha256`, `v2_object_sha256`, and `v2_reader_sha256`. The `falco_version` field reported `DIFFERENT` **only because the captured `falco --version` output embeds an invocation timestamp** and startup diagnostics. Inspection of all four printed strings establishes the same stable version fields:
+
+| Falco component | All four runs |
+| --- | --- |
+| Falco | `0.45.0` |
+| Libs | `0.26.0` |
+| Plugin API | `3.12.0` |
+| Engine | `0.65.0` |
+| Driver API | `11.0.0` |
+| Driver schema | `4.3.0` |
+| Default driver | `11.0.0+driver` |
+
+The observed invocation timestamps differed (17:54:38, 19:03:36, 19:08:12, and 19:16:55 on 2026-10-10), so raw `falco_version` text cannot be used as a stable version fingerprint without normalization. The boot ID and recorded Linux kernel matched for all four experiments. Recorded service invocation, rule-file hash and V2 component hashes also matched. Coupled with the previous identical racer-binary hash and zero reported rename/exec errors, these checks close the recorded configuration-drift gate for the four bounded runs.
+
+**Limits:** Matching version strings do not establish byte-identical Falco binaries or every runtime option and mutable state; a matching boot ID does not guarantee equal load, scheduling, or temporal interleaving. These checks are based on user-provided terminal output, not independent access to the VM's raw evidence.
+
 **Attribution limit:** The reviewed C source provides no intentional path construction explaining `rlalternate` or `taven0000`. The evidence therefore supports investigating a telemetry pathname-representation effect rather than a source-side manufactured hybrid. This is not yet proof of the exact kernel race, raw BPF event bytes, or security-rule impact.
 
 ## Implementation hypothesis
