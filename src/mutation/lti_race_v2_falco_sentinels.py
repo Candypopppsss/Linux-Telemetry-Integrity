@@ -163,7 +163,8 @@ def main():
                         try:
                             race.wait(timeout=5)
                         except subprocess.TimeoutExpired:
-                            race.kill(); race.wait()
+                            race.kill()
+                            race.wait()
                         raise RuntimeError("V2 collector ended before race workload completed")
                     time.sleep(0.05)
                 if race.returncode != 0:
@@ -180,7 +181,8 @@ def main():
             try:
                 collector.wait(timeout=20)
             except subprocess.TimeoutExpired:
-                collector.kill(); collector.wait()
+                collector.kill()
+                collector.wait()
 
     need(run / "trials.csv")
     need(run / "events.csv")
@@ -254,13 +256,17 @@ def main():
             klass = "UNCORRELATABLE"
             reason = f"trial outcome label={label} exit={row['exit_code']} signal={row['signal']}"
         elif not vrs:
-            klass = "MISSING_V2"; reason = "no V2 record for successful trial PID"
+            klass = "MISSING_V2"
+            reason = "no V2 record for successful trial PID"
         elif len(vrs) != 1:
-            klass = "DUPLICATE_V2"; reason = f"{len(vrs)} V2 records for trial PID"
+            klass = "DUPLICATE_V2"
+            reason = f"{len(vrs)} V2 records for trial PID"
         elif not frs:
-            klass = "MISSING_FALCO"; reason = "no Falco record for successful trial PID"
+            klass = "MISSING_FALCO"
+            reason = "no Falco record for successful trial PID"
         elif len(frs) != 1:
-            klass = "DUPLICATE_FALCO"; reason = f"{len(frs)} Falco records for trial PID"
+            klass = "DUPLICATE_FALCO"
+            reason = f"{len(frs)} Falco records for trial PID"
         else:
             vr = vrs[0]
             fr = frs[0]
@@ -323,7 +329,8 @@ def main():
     ]
     with (run / "correlation.csv").open("x", newline="") as f:
         w = csv.DictWriter(f, fieldnames=corr_fields)
-        w.writeheader(); w.writerows(correlation_rows)
+        w.writeheader()
+        w.writerows(correlation_rows)
 
     counter_errors = {k: counters.get(k) for k in ERROR_COUNTERS if counters.get(k, 0) != 0}
     health_ok = (
@@ -386,7 +393,8 @@ def main():
               f"Evidence: {run}"]
     report = "\n".join(lines) + "\n"
     (run / "report.txt").write_text(report)
-    print(); print(report)
+    print()
+    print(report)
 
     abnormal = [r for r in correlation_rows if r["classification"] != "CORRECT"]
     if abnormal:
