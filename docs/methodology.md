@@ -65,7 +65,17 @@ The latest supplied preflight supersedes the earlier inactive-service report:
 | `sudo auditctl -l` | `No rules` |
 | Boot parameters | Kernel `6.12.111+deb13-amd64`; no explicit `audit=` parameter shown |
 
-The unprivileged `command -v` checks printed no paths, but `sudo auditctl` executed successfully. The audit service is available; an audit comparison has not been run. A zero lost counter is a preflight snapshot, not a measurement of loss during a workload.
+The unprivileged `command -v` checks printed no paths, but `sudo auditctl` executed successfully. A zero lost counter in this preflight is not a workload measurement.
+
+A later user-reported three-observer run captured V2, Falco, and audit data:
+
+| Report timestamp (UTC) | Evidence directory under `raw/` | Trials | Rename overlap | V2/Falco identity | Audit loss before/after |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2026-10-10 15:25:36 | `race-v2-falco-ozmnmdkw` | 100 | 98 | 100 / 100 correct | 0 / 0 |
+
+The run reported zero missing, duplicate, misattributed, or representation-inconsistent V2/Falco records and passing collector accounting. Resolved paths were 64 equal and 36 with the requested filename differing from the two resolved-path fields. The bounded audit rule selected successful `execve` and `execveat` calls for the laboratory user; the saved audit log was reported as 448 KiB.
+
+These are conversation-reported results. The raw audit log is not published, and audit serial/PID/`PATH` inode correlation has not been completed. The run therefore establishes capture with no reported audit queue loss, not agreement between audit object identity and the V2 oracle.
 
 ## Interpretation
 

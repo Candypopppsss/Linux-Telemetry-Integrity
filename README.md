@@ -10,7 +10,7 @@ Linux execution-telemetry controls and a study of executable identity during con
 | --- | --- | --- |
 | Execution attempts and completed image transitions | Control code and parser tests available; kernel integration unverified | [Methodology](docs/methodology.md) |
 | V2/Falco rename–execution comparison | Four initial runs and two later live controls, each 100 trials; raw evidence retained on the research VM | [Results](docs/race-pilot.md) |
-| Audit comparison | Service active, auditing enabled, no rules loaded; comparison pending | [Audit status](docs/methodology.md#audit-status) |
+| Audit comparison | Bounded capture reported with zero audit loss; PID/object correlation pending | [Audit status](docs/methodology.md#audit-status) |
 
 ## Run the execution controls
 

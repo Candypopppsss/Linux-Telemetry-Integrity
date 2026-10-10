@@ -123,7 +123,7 @@ For saved evidence, use `src/tests/verify_race_paths.py` on original-name runs a
 1. Archive the complete source/build package and raw evidence with hashes; preserve the four original runs.
 2. Repeat the sentinel run and capture evidence closer to the kernel event boundary.
 3. Archive the live-control rule/configuration files and PID-level alert join; verify active rules and `rule_matching: all` for each repeat, with one baseline, object, and path alert per ordinary control PID.
-4. Configure and validate the audit comparator described in [methodology](methodology.md#audit-status).
+4. Complete audit serial/PID/`PATH` inode correlation for the captured three-observer run described in [methodology](methodology.md#audit-status).
 
 ## References
 
