@@ -4,7 +4,7 @@
 
 Compare the executable object selected during `execve()` with Falco's pathname representation while two directory entries are exchanged using `renameat2(RENAME_EXCHANGE)`.
 
-**Evidence status:** user-supplied terminal results and source excerpts, reviewed on 2026-10-10. Raw evidence remains on the research VM. The observations do not establish a product vulnerability or live detection bypass.
+**Evidence status:** user-supplied terminal results and source excerpts, reviewed through 2026-10-11. Raw evidence remains on the research VM. The observations do not establish a product vulnerability or live detection bypass.
 
 ## Method
 
@@ -96,7 +96,19 @@ Later user reports supplied two additional live runs:
 
 Both reports recorded zero missing, duplicate, or misattributed telemetry and passing V2 validation. The second reported rename overlap in all 100 trials. The reported pathname counts contain only the two configured basenames; neither run reproduced the hybrid pathname or an object/path alert-count difference.
 
-These counts supersede the earlier absence of reported live decision alerts. They are user-reported conversation results, not independently revalidated VM artifacts. Underlying PID-level validation output was not recovered; aggregate alert counts alone do not establish exactly one baseline, object, and path alert per execution. The complete rule file and effective configuration for these runs remain unavailable here. No live detection bypass is established.
+These counts supersede the earlier absence of reported live decision alerts. They are user-reported conversation results, not independently revalidated VM artifacts. Underlying PID-level validation output was not recovered for these two runs, so their aggregate counts alone do not establish one alert of each type per execution.
+
+### Day 4 instrumented validation
+
+A later staged rule file passed validation, the Falco service was active, and installed rule markers identified both object and path controls. Private configuration and installation evidence remain off-repository.
+
+| Report timestamp (UTC) | Evidence directory under `raw/` | Trials / overlap | V2/Falco identity | Baseline / object / path alerts | Same-PID joins |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2026-10-11 06:04:45 | `race-v2-falco-q46c3jww` | 100 / 99 | 100 / 100 correct | 100 / 100 / 100 | 100 |
+
+The runner classified 42 pathname outcomes as hybrid, with zero object-decision differences and 42 path-decision differences. All three alert streams retained 100 events and the same-PID join covered all 100 executions. The run did not demonstrate a live bypass or false positive.
+
+The linked audit provenance results are recorded in [methodology](methodology.md#provenance-collector-validation). Private raw evidence and rule contents are not independently available.
 
 ## Mechanism hypothesis
 
@@ -120,10 +132,10 @@ For saved evidence, use `src/tests/verify_race_paths.py` on original-name runs a
 
 ## Outstanding work
 
-1. Archive the complete source/build package and raw evidence with hashes; preserve the four original runs.
-2. Repeat the sentinel run and capture evidence closer to the kernel event boundary.
-3. Archive the live-control rule/configuration files and PID-level alert join; verify active rules and `rule_matching: all` for each repeat, with one baseline, object, and path alert per ordinary control PID.
-4. Complete audit serial/PID/`PATH` inode correlation for the captured three-observer run described in [methodology](methodology.md#audit-status).
+1. Archive the complete source/build package and raw evidence with hashes; preserve the original and instrumented runs.
+2. Repeat the instrumented sentinel workload under a frozen configuration to estimate the hybrid-path and decision-difference rates.
+3. Test a narrowly scoped live verdict whose path predicate can diverge while the object control remains authoritative; quantify missed and false alerts.
+4. Publish sanitized aggregate audit and callsite evidence when disclosure constraints permit; do not publish private telemetry.
 
 ## References
 

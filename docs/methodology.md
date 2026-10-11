@@ -75,7 +75,29 @@ A later user-reported three-observer run captured V2, Falco, and audit data:
 
 The run reported zero missing, duplicate, misattributed, or representation-inconsistent V2/Falco records and passing collector accounting. Resolved paths were 64 equal and 36 with the requested filename differing from the two resolved-path fields. The bounded audit rule selected successful `execve` and `execveat` calls for the laboratory user; the saved audit log was reported as 448 KiB.
 
-These are conversation-reported results. The raw audit log is not published, and audit serial/PID/`PATH` inode correlation has not been completed. The run therefore establishes capture with no reported audit queue loss, not agreement between audit object identity and the V2 oracle.
+These are conversation-reported results. The raw audit log is not published.
+
+### Provenance collector validation
+
+On 2026-10-11, a private eBPF provenance collector was reported to build successfully with four programs compiled and no probes attached during the build. Its static control produced 22 events: 12 `GETNAME` and 10 `INODE`, split evenly across two target processes. Expected inode identities and per-process event order passed. The evidence directory basename is `audit-provenance-static-QgOkWj83`.
+
+A subsequent instrumented race linked `race-v2-falco-q46c3jww` with private collector evidence `audit-provenance-race-ToGxAmJa`:
+
+| Trials | Rename overlap | V2/Falco identity | Probe events | Audit status |
+| ---: | ---: | ---: | ---: | --- |
+| 100 | 99 | 100 / 100 correct | 1,100 / 1,100 consumed | `lost 0`, `backlog 0` |
+
+The collector reported 600 `GETNAME` and 500 `INODE` events, with zero read errors or reservation failures. The recovered audit export contained 3,846 lines and 976,495 bytes.
+
+| Correlation check | Reported result |
+| --- | ---: |
+| Complete audit/probe trial correlation | 100 / 100 |
+| Probe order and inode pair matched audit | 100 / 100 |
+| Audit `PATH` item 0 matched V2 | 100 / 100 |
+| Audit `PATH` item 1 matched V2 | 56 / 100 |
+| Item 1 used the same pathname but a different inode | 44 / 100 |
+
+These results establish reported correlation between the private probe, audit serialization, and the V2 oracle for this run. They do not establish authorization impact, a detection bypass, or independent reproduction. The private collector, rule files, and raw telemetry remain unpublished.
 
 ## Interpretation
 
