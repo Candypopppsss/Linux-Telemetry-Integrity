@@ -99,6 +99,17 @@ The collector reported 600 `GETNAME` and 500 `INODE` events, with zero read erro
 
 These results establish reported correlation between the private probe, audit serialization, and the V2 oracle for this run. They do not establish authorization impact, a detection bypass, or independent reproduction. The private collector, rule files, and raw telemetry remain unpublished.
 
+### Callsite trace
+
+A private static ftrace run, `audit-callsite-ftrace-cYLebedO`, reported 22 trace entries. Seven entries reached `__audit_getname` and six reached `__audit_inode`. The captured stacks separated two lookup paths:
+
+- the ordinary open/exec path through `path_openat`;
+- TOMOYO domain resolution through `tomoyo_find_next_domain`, `tomoyo_realpath_nofollow`, and pathname lookup.
+
+The host had TOMOYO enabled, but the current domain was `unconfined`; no policy updates or violations were reported. Linux v6.12 source confirms that TOMOYO resolves the executable name during domain selection and that `tomoyo_realpath_nofollow` performs a kernel pathname lookup.
+
+This trace provides a call-path explanation for additional audit name/inode observations. It does not prove that every secondary audit `PATH` item is TOMOYO-derived, identify the Falco pathname interleaving, or establish security impact. Raw stacks and addresses remain private.
+
 ## Interpretation
 
 | Observation | Interpretation |
@@ -116,3 +127,5 @@ Collectors should distinguish attempts, failures, and completions and report att
 - [Linux v6.6 scheduler trace events](https://github.com/torvalds/linux/blob/v6.6/include/trace/events/sched.h)
 - [execve(2)](https://man7.org/linux/man-pages/man2/execve.2.html)
 - [bpftrace 0.21 documentation](https://bpftrace.org/docs/0.21)
+- [Linux v6.12 TOMOYO domain selection](https://github.com/torvalds/linux/blob/v6.12/security/tomoyo/domain.c)
+- [Linux v6.12 TOMOYO pathname resolution](https://github.com/torvalds/linux/blob/v6.12/security/tomoyo/realpath.c)

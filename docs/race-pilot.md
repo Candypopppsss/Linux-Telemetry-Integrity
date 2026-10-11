@@ -114,6 +114,8 @@ The linked audit provenance results are recorded in [methodology](methodology.md
 
 Falco libs 0.26.0 reconstructs `trusted_exepath` through `auxmap__store_task_exe_file_path` and a dentry walk. The implementation documents that pathname components cannot be locked against concurrent rename. The hybrid strings are consistent with this limitation; their exact collection stage and interleaving remain unverified.
 
+The private ftrace result in [methodology](methodology.md#callsite-trace) narrows the duplicate audit observations to ordinary VFS and TOMOYO lookup paths. It does not identify the source of Falco's hybrid pathname and is not evidence of a live detection bypass.
+
 ## Reproduction dependencies
 
 The archived runners expect `~/linux-telemetry-integrity`, an active `falco-modern-bpf.service`, and these VM-local components:
